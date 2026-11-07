@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.env
+.demo/
+data/.audit_ledger.lock
+data/.target.lock
+data/audit_ledger.json
+data/.discord_webhook

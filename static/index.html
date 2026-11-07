@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="PreFlight live cross-boundary release verification workbench">
+  <title>PreFlight · Release Workbench</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%235344d0'/%3E%3Cpath d='m8 21 8-11h8l-8 11zm0-5h6l-4 5H8z' fill='white'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script async src="https://cdn.tailwindcss.com"></script>
+  <script>try { if (localStorage.getItem("preflight-workbench-theme") === "dark") document.documentElement.dataset.theme = "dark"; } catch {}</script>
+  <style>
+    :root { color-scheme:light; --bg:#f8fafc; --card:#fff; --line:#e2e8f0; --text:#0f172a; --mute:#526176; --soft:#f1f5f9; --accent:#5344d0; --accent-bg:#eeebff; --bad:#a82b3a; --bad-bg:#fff0f1; --good:#087455; --good-bg:#e5f8ef; --warn:#8b5207; --warn-bg:#fff5e0; --grid:#e7e3f9; --hero:#faf9ff; --mono:"JetBrains Mono",Consolas,monospace; --sans:Inter,system-ui,sans-serif; }
+    [data-theme="dark"] { color-scheme:dark; --bg:#09090b; --card:#18181b; --line:#27272a; --text:#f4f4f5; --mute:#a5a7b4; --soft:#202024; --accent:#b6aaff; --accent-bg:#2a2447; --bad:#ff9ba8; --bad-bg:#382029; --good:#81e7bd; --good-bg:#162d25; --warn:#ffd18e; --warn-bg:#392b1b; --grid:#2d2445; --hero:#191522; }
+    *,*::before,*::after{box-sizing:border-box} body{margin:0;color:var(--text);background:var(--bg);font:14px/1.55 var(--sans)} h1,h2,h3,p,pre,ul{margin:0} button,input{font:inherit} button{cursor:pointer} button:disabled{opacity:.55;cursor:wait} a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline} :focus-visible{outline:2px solid var(--accent);outline-offset:3px} [hidden]{display:none!important}
+    code,pre,.mono,time{font-family:var(--mono);font-variant-numeric:tabular-nums} .wrap{width:min(1380px,calc(100% - 64px));margin:auto} .bar{background:var(--card);border-bottom:1px solid var(--line)} .nav{display:flex;justify-content:space-between;align-items:center;gap:16px;min-height:66px} .brand{display:flex;align-items:center;gap:11px;font-size:16px;font-weight:800;letter-spacing:-.035em} .brand span:last-child{font-weight:550;color:var(--mute);font-size:12px;letter-spacing:0} .nav-right,.badges,.actions,.telemetry{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:6px;background:var(--soft);border:1px solid var(--line);color:var(--mute);font-size:11px;font-weight:650;max-width:100%;overflow-wrap:anywhere} [data-tone=bad]{color:var(--bad);background:var(--bad-bg)} [data-tone=good]{color:var(--good);background:var(--good-bg)} [data-tone=warn]{color:var(--warn);background:var(--warn-bg)} [data-tone=accent]{color:var(--accent);background:var(--accent-bg)}
+    .dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none} .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:35px;padding:6px 11px;border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:7px;font-size:12px;font-weight:680;text-align:center} .btn:hover:not(:disabled){border-color:var(--accent)} .primary{background:#5344d0;color:white;border-color:#5344d0} .primary:hover:not(:disabled){background:#4334b7} #theme{width:36px;padding:0;font-size:17px}
+    main{padding-block:22px 36px} .hero{isolation:isolate;position:relative;overflow:hidden;display:flex;justify-content:space-between;align-items:center;gap:18px;padding:24px 26px;background:var(--hero);border:1px solid var(--line);border-radius:12px} .hero::before{content:"";position:absolute;z-index:-1;inset:0 0 0 45%;background:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:22px 22px;mask-image:linear-gradient(90deg,transparent,#000 70%)} .eyebrow,.section-num{font:600 10px/1.4 var(--mono);text-transform:uppercase;letter-spacing:.12em;color:var(--accent)} h1{font-size:clamp(24px,3vw,39px);line-height:1.14;letter-spacing:-.055em;margin:5px 0} .hero p{color:var(--mute);font-size:13px;margin-bottom:12px} .gate{font:600 11px var(--mono);padding:8px 10px} .repo-box{background:var(--card);border:1px solid var(--line);border-radius:8px;min-width:0;padding:10px 12px;max-width:100%} .repo-box .badges{margin-top:7px} .repo-box a{font-weight:650;font-size:12px;overflow-wrap:anywhere}
+    section{margin-top:18px} .heading{display:flex;gap:8px;align-items:center;margin-bottom:8px} .section-num{display:grid;place-items:center;width:24px;height:24px;background:var(--accent-bg);border-radius:6px} h2{font-size:17px;letter-spacing:-.025em} h3{font-size:13px;font-weight:700} .section-side{margin-left:auto} .card{border:1px solid var(--line);border-radius:9px;background:var(--card);min-width:0;overflow:hidden} .card-head{display:flex;align-items:center;justify-content:space-between;gap:7px;padding:10px 13px;border-bottom:1px solid var(--line);min-height:44px} .card-body{padding:11px 13px} .caption{font:10px/1.5 var(--mono);color:var(--mute);overflow-wrap:anywhere} .grid-two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .agents{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px} .agent{display:flex;gap:8px;padding:9px;align-items:center;background:var(--soft);border:1px solid var(--line);border-radius:7px;min-width:0} .avatar{display:grid;place-items:center;width:32px;height:32px;flex:none;border-radius:7px;background:var(--accent-bg);color:var(--accent);font:650 10px var(--mono)} .agent strong{font-size:12px;overflow-wrap:anywhere} .agent small{display:block;color:var(--mute);font-size:10px} .agent .pill{margin-left:4px;padding:2px 4px;font-size:9px} .actions{margin-top:10px}
+    .notice{margin-top:9px;padding:8px 11px;border:1px solid var(--line);border-radius:7px;font-size:12px;color:var(--mute);background:var(--card)} .notice[data-tone=bad]{background:var(--bad-bg);color:var(--bad)} .notice[data-tone=good]{background:var(--good-bg);color:var(--good)}
+    .table-wrap{overflow:auto} table{width:100%;border-collapse:collapse;text-align:left} th,td{padding:8px 10px;border-bottom:1px solid var(--line);font-size:11px;vertical-align:top;overflow-wrap:anywhere} th{color:var(--mute);font-weight:650} td{font:11px/1.5 var(--mono)} td.bad{color:var(--bad)} .matrix-note{padding:9px 12px;color:var(--mute);font-size:11px} .codebox{max-height:320px;overflow:auto;padding:11px 12px;background:var(--soft);color:var(--text);font:11px/1.6 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere} .codebox span{display:inline} .codebox .plus{color:var(--good);background:var(--good-bg)} .codebox .minus{color:var(--bad);background:var(--bad-bg)} .codebox .hunk{color:var(--accent)}
+    .drop{display:grid;gap:6px;margin-block:9px;padding:10px;border:1px dashed var(--line);border-radius:7px;background:var(--soft);font-size:12px;font-weight:650} .drop[data-active]{background:var(--accent-bg);border-color:var(--accent)} input{color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:6px;padding:6px 8px;max-width:100%} .telemetry{margin:11px 0 7px} #hash{overflow-wrap:anywhere;font-size:10px} .runbook{max-height:220px} mark{background:var(--warn-bg);color:var(--warn);font-weight:700} .ledger{list-style:none;padding:0 12px;max-height:285px;overflow:auto} .ledger li{padding:8px 0;border-bottom:1px solid var(--line);font-size:11px;overflow-wrap:anywhere} .ledger li:last-child{border:0} .ledger time{color:var(--mute);font-size:10px;margin-left:auto} .ledger code{display:block;color:var(--mute);margin-top:3px} .ledger details{margin-top:4px} summary{cursor:pointer;color:var(--accent)} .empty{padding:12px;color:var(--mute)} .foot{display:flex;justify-content:space-between;gap:10px;margin-top:18px;color:var(--mute);font:10px var(--mono)}
+    dialog{padding:17px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--text);width:min(435px,calc(100% - 32px))} dialog::backdrop{background:#0f172a99} dialog p{color:var(--mute);margin:6px 0 10px;font-size:12px} dialog label{display:grid;gap:4px;margin-top:9px;font-size:12px} dialog .check{display:flex;align-items:center} dialog .actions{justify-content:flex-end}
+    @media(max-width:950px){.wrap{width:calc(100% - 36px)}.hero{align-items:flex-start;flex-direction:column}.grid-two{grid-template-columns:1fr}.agents{grid-template-columns:1fr}.agent small{display:inline;margin-left:5px}}
+    @media(max-width:540px){.wrap{width:calc(100% - 22px)}.nav{min-height:58px}.brand span:last-child{display:none}.hero{padding:15px}.hero p{font-size:12px}.heading{align-items:flex-start}.section-side{display:none}.card-head{flex-wrap:wrap}.btn{min-height:40px}.agent small{display:block;margin-left:0}th,td{padding:6px;font-size:10px}}
+    .hero h1{font-size:clamp(24px,3vw,39px);font-weight:800;line-height:1.14;letter-spacing:-.055em;margin:5px 0}
+    .heading h2,#approval-title{font-size:17px;font-weight:700;letter-spacing:-.025em}
+    .card-head h3{font-size:13px;font-weight:700}
+    .topology-grid{grid-template-columns:minmax(0,1.85fr) minmax(270px,1fr)}
+    .canvas-scroll{overflow:auto;background:var(--soft)}
+    .canvas{position:relative;isolation:isolate;min-width:690px;height:290px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:repeat(2,1fr);gap:18px;padding:17px;background-image:radial-gradient(var(--line) 1px,transparent 1px);background-size:15px 15px}
+    .wires{position:absolute;inset:0;width:100%;height:100%;z-index:-1;overflow:visible}
+    .wire{fill:none;stroke:var(--mute);opacity:.42;stroke-width:2;vector-effect:non-scaling-stroke;marker-end:url(#arrow)}
+    .packet{fill:none;stroke:var(--accent);opacity:0;stroke-width:3;stroke-dasharray:7 110;stroke-linecap:round;vector-effect:non-scaling-stroke}
+    .packet.active{opacity:1;animation:packet-flow 1s linear infinite}
+    @keyframes packet-flow{to{stroke-dashoffset:-117}}
+    .topo-node{display:flex;flex-direction:column;align-self:center;justify-content:center;min-height:103px;min-width:0;gap:4px;padding:9px;border:1px solid var(--line);border-radius:9px;background:var(--card);color:var(--text);text-align:left;overflow-wrap:anywhere}
+    .topo-node:hover,.topo-node:focus-visible{border-color:var(--accent);text-decoration:none}
+    .topo-node.active{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+    .topo-node[data-gate=BLOCKED]{border-color:var(--bad);background:var(--bad-bg);animation:node-pulse 2.8s ease-out infinite}
+    .topo-node[data-gate=VERIFIED]{border-color:var(--good);background:var(--good-bg);animation:node-pulse 2.8s ease-out infinite}
+    @keyframes node-pulse{50%{box-shadow:0 0 0 4px var(--line)}}
+    .topo-node strong{font-size:11px}.topo-node small{font:9px/1.4 var(--mono);color:var(--mute)}
+    .topo-node .pill{width:fit-content;font-size:9px;padding:2px 5px}.topo-node .node-status{color:var(--accent);font-weight:700}
+    .node-pr{grid-area:1 / 1 / 3 / 2}.node-triage{grid-area:1 / 2 / 3 / 3}.node-repro{grid-area:1 / 3 / 2 / 4}.node-runbook{grid-area:2 / 3 / 3 / 4}.node-service{grid-area:1 / 4 / 3 / 5}
+    .bus{max-height:290px}.bus-row{display:grid;grid-template-columns:29px minmax(0,1fr);gap:7px}.bus-row .avatar{width:28px;height:28px}.bus-summary{margin-top:4px;color:var(--mute)}
+    .topology-detail{min-height:32px;padding:6px 12px;border-top:1px solid var(--line);color:var(--mute);font-size:11px}
+    @media(max-width:1150px){.topology-grid{grid-template-columns:1fr}}
+    @media(prefers-reduced-motion:reduce){.packet.active,.topo-node[data-gate]{animation:none}}
+  </style>
+</head>
+<body class="antialiased">
+  <header class="bar"><div class="wrap nav">
+    <div class="brand"><svg width="31" height="31" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#5344d0"/><path d="m8 21 8-11h8l-8 11zm0-5h6l-4 5H8z" fill="white"/></svg><span>PreFlight</span><span>Release Workbench</span></div>
+    <div class="nav-right"><span class="pill mono" id="connection" role="status">Connecting</span><button type="button" class="btn" id="discord-settings">Discord settings</button><button type="button" class="btn" id="theme" aria-label="Switch to dark mode">☾</button></div>
+  </div></header>
+  <main class="wrap">
+    <div class="hero">
+      <div><div class="eyebrow">AcmePay / Release Engineering</div><h1>Autonomous Cross-Boundary Release &amp; Runbook Gate</h1><p>Powered by Switch</p><span class="pill gate" id="gate" role="status">CHECKING RELEASE</span></div>
+      <div class="repo-box"><div class="caption">LIVE TARGET REPOSITORY</div><a id="repo">Waiting for checkout</a><div class="badges"><span class="pill mono" id="branch">—</span><span class="pill mono" id="commit">—</span><span class="pill mono" id="health">:8001 · checking</span></div></div>
+    </div>
+    <p class="notice" id="notice" role="status" hidden></p>
+    <section aria-labelledby="topology-title">
+      <div class="heading"><span class="section-num">◎</span><h2 id="topology-title">Live Switch Room Topology &amp; Agent Interaction Canvas</h2><span class="pill mono section-side" id="stream-status">Connecting SSE</span></div>
+      <div class="grid-two topology-grid">
+        <article class="card"><div class="card-head"><h3>Release evidence path</h3><button class="btn primary" type="button" id="handoff">Stream Live Room Handoff</button></div>
+          <div class="canvas-scroll" tabindex="0" aria-label="Scrollable agent topology">
+            <div class="canvas">
+              <svg class="wires" viewBox="0 0 800 290" preserveAspectRatio="none" aria-hidden="true">
+                <defs><marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0l8 4-8 4z" fill="var(--mute)"/></marker></defs>
+                <path class="wire" d="M195 145H211"/><path class="packet" id="edge-request" d="M195 145H211"/>
+                <path class="wire" d="M391 144C402 144 397 77 409 77"/><path class="packet" id="edge-triage-repro" d="M391 144C402 144 397 77 409 77"/>
+                <path class="wire" d="M391 146C402 146 397 214 409 214"/><path class="packet" id="edge-triage-runbook" d="M391 146C402 146 397 214 409 214"/>
+                <path class="wire" d="M587 77C598 77 593 144 604 144"/><path class="packet" id="edge-repro-service" d="M587 77C598 77 593 144 604 144"/>
+                <path class="wire" d="M587 214C598 214 593 146 604 146"/><path class="packet" id="edge-runbook-service" d="M587 214C598 214 593 146 604 146"/>
+              </svg>
+              <a class="topo-node node-pr" id="topo-pr" tabindex="0"><span class="pill mono">GITHUB</span><strong>Security PR #402</strong><small id="topo-pr-ref">Checking branch</small><small id="topo-pr-sha">—</small></a>
+              <button type="button" class="topo-node node-triage" id="node-triage"><span class="pill mono" data-tone="accent">anyone</span><strong>@preflight-triager</strong><small>Switch Room Entrypoint</small><small class="node-status" id="topo-triage-status">IDLE</small><small>python -m agents.cli_tools triage</small></button>
+              <button type="button" class="topo-node node-repro" id="node-repro"><span class="pill mono" title="Restricted workflow. The repro agent checks that the sender is the designated triager.">🔒 owner-agents</span><strong>@preflight-repro</strong><small class="node-status" id="topo-repro-status">IDLE</small><small id="topo-probes">Awaiting binary proof</small><small id="topo-receipt">SHA-256 —</small></button>
+              <button type="button" class="topo-node node-runbook" id="node-runbook"><span class="pill mono">🔒 owner-agents</span><strong>@preflight-runbook</strong><small class="node-status" id="topo-runbook-status">IDLE</small><small id="topo-stale">Checking runbook</small></button>
+              <a class="topo-node node-service" id="node-service" href="http://localhost:8001/health" target="_blank" rel="noopener"><span class="pill mono">LIVE · :8001</span><strong>AcmePay service</strong><small class="node-status" id="topo-gate">CHECKING</small><small>Runtime policy &amp; Git revision</small></a>
+            </div>
+          </div>
+          <p class="topology-detail" id="topology-detail" role="status">Select an agent to inspect its role and latest handoff.</p>
+        </article>
+        <article class="card"><div class="card-head"><h3>Switch Room Live Bus</h3><span class="pill mono" data-tone="accent">#acmepay-preflight</span></div><ul class="ledger bus" id="bus" tabindex="0"><li class="empty">Waiting for room activity.</li></ul></article>
+      </div>
+    </section>
+    <section aria-labelledby="pipeline-title">
+      <div class="heading"><span class="section-num">01</span><h2 id="pipeline-title">Switch Multi-Agent Room Pipeline</h2><span class="pill mono section-side" data-tone="accent">#acmepay-preflight</span></div>
+      <div class="card card-body">
+        <div class="agents">
+          <div class="agent"><span class="avatar">TRI</span><div><strong>@preflight-triager</strong><span class="pill mono" data-tone="accent">anyone</span><small>Contract &amp; PR Diff Auditor</small></div></div>
+          <div class="agent"><span class="avatar">REP</span><div><strong>@preflight-repro</strong><span class="pill mono">owner-agents</span><small>Sandboxed Binary Multipart Runner</small></div></div>
+          <div class="agent"><span class="avatar">RUN</span><div><strong>@preflight-runbook</strong><span class="pill mono">owner-agents</span><small>Stale Runbook &amp; SDK Reconciler</small></div></div>
+        </div>
+        <div class="actions"><button type="button" class="btn primary" id="verify">Run Live Multi-Agent Audit &amp; Binary Repro</button><button type="button" class="btn" id="patch">Apply Verified Contract &amp; Runbook Patch</button><button type="button" class="btn" id="approve-push">Approve &amp; Push Fix to GitHub PR #402</button><button type="button" class="btn" id="reset">Reset Target PR Working Tree</button></div>
+      </div>
+    </section>
+    <section aria-labelledby="matrix-title">
+      <div class="heading"><span class="section-num">02</span><h2 id="matrix-title">Cross-Boundary Contract Matrix</h2><a class="section-side caption" id="pr"></a></div>
+      <div class="grid-two">
+        <article class="card"><div class="card-head"><h3>Policy parity</h3><span class="pill mono" id="delta">—</span></div>
+          <div class="table-wrap"><table><thead><tr><th scope="col">Contract</th><th scope="col">Backend runtime</th><th scope="col">Frontend SDK</th><th scope="col">SRE runbook</th></tr></thead>
+          <tbody><tr><th scope="row">Upload limit</th><td id="backend-limit">—</td><td id="sdk-limit">—</td><td id="runbook-limit">—</td></tr><tr><th scope="row">Retry env</th><td id="backend-retry">—</td><td id="sdk-retry">—</td><td id="runbook-retry">—</td></tr></tbody></table></div><p class="matrix-note" id="findings">Reading policy from the live service and checkout.</p>
+        </article>
+        <article class="card"><div class="card-head"><h3>Unified Git diff</h3><span class="caption" id="git-label">git diff main..HEAD</span></div><pre class="codebox" id="diff" tabindex="0">Waiting for Git evidence…</pre></article>
+      </div>
+    </section>
+    <section aria-labelledby="probe-title">
+      <div class="heading"><span class="section-num">03</span><h2 id="probe-title">Live Multipart Probe &amp; Runbook Audit</h2><span class="caption section-side">:8001 /v1/invoices/upload</span></div>
+      <div class="grid-two">
+        <article class="card"><div class="card-head"><h3>Binary invoice verifier</h3><span class="pill mono">application/pdf</span></div><div class="card-body">
+          <div class="actions"><button type="button" class="btn" id="probe-small">1.5 MB PDF · Within both limits</button><button type="button" class="btn" id="probe-large">4.0 MB PDF · Verify boundary</button></div>
+          <form id="upload"><label class="drop" id="drop">Drop a real invoice or choose a file<input type="file" id="file" aria-describedby="file-name"><span class="caption" id="file-name">No file selected</span></label><button class="btn primary" type="submit" id="send">Send real file</button></form>
+          <div class="telemetry" role="status"><span class="pill mono" id="http-status">Awaiting probe</span><span class="caption" id="latency">— ms</span></div><p class="mono" id="hash">SHA-256 —</p>
+        </div><pre class="codebox" id="response" tabindex="0">Live response JSON will appear here.</pre></article>
+        <article class="card"><div class="card-head"><h3>SRE runbook</h3><span class="pill mono" id="runbook-status">Checking</span></div><pre class="codebox runbook" id="runbook" tabindex="0">Waiting for docs/oncall-runbook.md…</pre><div class="card-head"><h3>Append-only audit ledger</h3><span class="pill mono" id="event-count">0 events</span></div><ul class="ledger" id="ledger" tabindex="0"><li class="empty">Waiting for recorded evidence…</li></ul></article>
+      </div>
+    </section>
+    <footer class="foot"><span>PREFLIGHT / RELEASE CONTROL</span><a href="/docs">API documentation</a></footer>
+  </main>
+  <dialog id="approval"><form id="approval-form"><h2 id="approval-title">Human sign-off</h2><p id="approval-detail"></p><label>Approval reference<input name="approval_id" required maxlength="200" placeholder="Change ticket or approval ID"></label><label>Operator token<input name="token" type="password" required autocomplete="off"></label><label class="check" id="push-option"><input name="push" type="checkbox"> Commit and push the verified patch to the PR branch</label><div class="actions"><button type="button" class="btn" id="cancel">Cancel</button><button type="submit" class="btn primary">Confirm operation</button></div></form></dialog>
+  <dialog id="discord-dialog"><form id="discord-form"><h2>Discord notification settings</h2><p id="discord-current">Webhook status unavailable.</p><label>Discord webhook URL<input name="webhook_url" type="password" autocomplete="off" placeholder="Leave blank to disable notifications"></label><label>Operator token<input name="token" type="password" required autocomplete="off"></label><div class="actions"><button class="btn" type="button" id="discord-cancel">Cancel</button><button class="btn primary" type="submit">Save settings</button></div></form></dialog>
+  <script>
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+    const root = document.documentElement;
+    function show(id, value, tone) {
+      const element = $(id);
+      const next = String(value ?? "—");
+      if (element.textContent !== next) element.textContent = next;
+      if (tone) element.dataset.tone = tone; else delete element.dataset.tone;
+    }
+    function node(tag, value, className) {
+      const item = document.createElement(tag);
+      if (value != null) item.textContent = value;
+      if (className) item.className = className;
+      return item;
+    }
+    function theme() {
+      const dark = root.dataset.theme === "dark";
+      show("theme", dark ? "☀" : "☾");
+      $("theme").setAttribute("aria-label", "Switch to " + (dark ? "light" : "dark") + " mode");
+    }
+    theme();
+    $("theme").onclick = () => {
+      root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+      try { localStorage.setItem("preflight-workbench-theme", root.dataset.theme); } catch {}
+      theme();
+    };
+    function link(id, label, raw) {
+      const element = $(id);
+      show(id, label);
+      element.removeAttribute("href");
+      try {
+        const url = new URL(raw);
+        if (url.protocol === "https:" && url.hostname === "github.com") {
+          element.href = url.href; element.target = "_blank"; element.rel = "noopener";
+        }
+      } catch {}
+    }
+    function renderDiff(diff, working) {
+      const view = $("diff");
+      const body = [diff, working ? "\n# Uncommitted working tree changes\n" + working : ""].join("");
+      if (view.dataset.source === body) return;
+      view.dataset.source = body;
+      if (!body) { view.textContent = "No pending differences."; return; }
+      const lines = document.createDocumentFragment();
+      for (const line of body.split("\n")) {
+        const tone = line.startsWith("@@") || line.startsWith("diff --git") ? "hunk"
+          : line.startsWith("+") && !line.startsWith("+++") ? "plus"
+          : line.startsWith("-") && !line.startsWith("---") ? "minus" : "";
+        lines.append(node("span", line + "\n", tone));
+      }
+      view.replaceChildren(lines);
+    }
+    function renderRunbook(content, drift) {
+      const view = $("runbook");
+      const stale = drift.runbook_drift;
+      const key = String(stale) + content;
+      if (view.dataset.source === key) return;
+      view.dataset.source = key;
+      if (!stale) { view.textContent = content; return; }
+      const tokens = content.split(/(\bLEGACY_RETRY_LIMIT\b|\b10[ \t]*MB\b)/g);
+      view.replaceChildren(...tokens.map((part, index) => index % 2 ? node("mark", part) : document.createTextNode(part)));
+    }
+    function renderLedger(events) {
+      const list = $("ledger");
+      const latest = events.at(-1)?.id ?? 0;
+      if (list.dataset.latest === String(latest)) return;
+      list.dataset.latest = latest;
+      show("event-count", events.length + (events.length === 1 ? " event" : " events"));
+      if (!events.length) { list.replaceChildren(node("li", "No verification events recorded.", "empty")); return; }
+      list.replaceChildren(...events.slice().reverse().map((event) => {
+        const row = node("li");
+        const header = node("div", null, "badges");
+        const detail = event.evidence ?? {};
+        const title = event.agent_name || (event.source === "switch" ? "Switch Room event" : event.action);
+        const status = node("span", event.status, "pill mono");
+        status.dataset.tone = /REGRESSION|BLOCKED|ERROR|FAILED/.test(event.status) ? "bad" : "good";
+        const time = node("time", event.timestamp.slice(11, 19) + " UTC");
+        time.dateTime = event.timestamp;
+        header.append(node("strong", title), status, time);
+        row.append(header);
+        if (event.source === "room_rehearsal") {
+          row.append(node("span", "LOCAL ROOM REHEARSAL", "caption"));
+          row.append(node("p", detail.message));
+        }
+        if (event.command_run) row.append(node("code", event.command_run));
+        if (detail.sha256) row.append(node("code", "HTTP " + detail.http_status + " · SHA-256 " + detail.sha256));
+        const expansion = node("details");
+        expansion.append(node("summary", "View evidence"), node("pre", JSON.stringify(detail, null, 2), "codebox"));
+        row.append(expansion);
+        return row;
+      }));
+    }
+    let auditEvents = [];
+    let latestState;
+    let busConnection;
+    const edgeIds = ["edge-request", "edge-triage-repro", "edge-triage-runbook", "edge-repro-service", "edge-runbook-service"];
+    const agentNodes = {"@preflight-triager":"node-triage", "@preflight-repro":"node-repro", "@preflight-runbook":"node-runbook"};
+    const labels = {
+      AUDITING_DIFF:"AUDITING DIFF", ROUTED:"ROUTED TO REPRO & RUNBOOK", PROBING:"RUNNING MULTIPART PROBES",
+      PROOF_RECORDED:"BINARY PROOF RECORDED", PREPARING_PATCH:"PREPARING PATCH",
+      AWAITING_HUMAN_APPROVAL:"AWAITING HUMAN SIGN-OFF", APPLYING_PATCH:"APPLYING APPROVED PATCH",
+      PATCH_COMMITTED:"PATCH COMMITTED", VERIFIED:"PATCH VERIFIED",
+    };
+    function visibleMessage(event) {
+      if (event.action === "handoff") return event;
+      if (event.source === "room_rehearsal") return {
+        ...event, from_agent:event.agent_name, step_status:event.status,
+        summary:event.evidence.message, proof_payload:event.evidence,
+      };
+      if (event.source === "switch") {
+        const envelope = event.evidence?.payload ?? event.evidence ?? {};
+        const content = envelope.message ?? envelope;
+        const sender = content.sender_name || content.sender;
+        return {
+          ...event, from_agent:typeof sender === "string" ? sender : sender?.name || "Switch Room",
+          to_agent:content.target_agent || content.recipient, step_status:event.status,
+          summary:typeof content.content === "string" ? content.content : "Received a Switch protocol event.",
+          proof_payload:event.evidence,
+        };
+      }
+      return null;
+    }
+    function renderTopology() {
+      if (!latestState) return;
+      const state = latestState;
+      const handoffs = auditEvents.filter((event) => event.action === "handoff");
+      const current = handoffs.at(-1);
+      const activeRun = current?.run_id;
+      const visibleRun = handoffs.filter((event) => event.run_id === activeRun);
+      const find = (agent) => visibleRun.findLast((event) => event.from_agent === agent);
+      for (const [agent, nodeId] of Object.entries(agentNodes)) {
+        const last = find(agent);
+        $(nodeId).classList.toggle("active", current?.from_agent === agent ||
+          (current?.step_status === "REQUESTED" && agent === "@preflight-triager"));
+        show(nodeId.replace("node-", "topo-") + "-status", labels[last?.step_status] || last?.step_status || "IDLE");
+      }
+      const reproProof = visibleRun.findLast((event) => event.from_agent === "@preflight-repro" && event.proof_payload?.probes);
+      const probes = reproProof?.proof_payload.probes || current?.proof_payload?.verification?.probes || [];
+      show("topo-probes", probes.length ? probes.map((item) => item.size_mb + " MB → " + item.http_status + (item.http_status === 200 ? " OK" : " REJECTED")).join(" · ") : "Awaiting binary proof");
+      const receipt = probes.at(-1)?.sha256;
+      show("topo-receipt", receipt ? "SHA-256 " + receipt.slice(0, 12) + "…" : "SHA-256 —");
+      $("topo-receipt").title = receipt || "";
+      show("topo-stale", state.runbook_drift
+        ? state.contracts.frontend_sdk.expected_retry_env + " → " + state.contracts.backend.RETRY_ENV_VAR
+          + " · " + state.contracts.frontend_sdk.allowed_upload_mb + " MB → " + state.contracts.backend.MAX_UPLOAD_MB + " MB"
+        : "SDK and runbook aligned");
+      show("topo-pr-ref", state.repository.branch);
+      show("topo-pr-sha", state.repository.short_sha);
+      const pr = state.repository.pull_requests.items?.find((item) => item.headRefName === state.repository.branch);
+      if (pr?.url?.startsWith("https://github.com/")) {
+        $("topo-pr").href = pr.url; $("topo-pr").target = "_blank"; $("topo-pr").rel = "noopener";
+      }
+      $("node-service").dataset.gate = state.release_gate;
+      show("topo-gate", state.release_gate);
+      const activeEdges = current?.from_agent === "@preflight-repro" ? ["edge-repro-service"]
+        : current?.from_agent === "@preflight-runbook" ? [current.step_status.startsWith("PATCH") || current.step_status === "APPLYING_PATCH"
+          ? "edge-runbook-service" : "edge-triage-runbook"]
+        : current?.step_status === "ROUTED" ? ["edge-triage-repro", "edge-triage-runbook"]
+        : current ? ["edge-request"] : [];
+      edgeIds.forEach((id) => $(id).classList.toggle("active", activeEdges.includes(id)));
+    }
+    function renderBus() {
+      const bus = $("bus");
+      const items = auditEvents.map(visibleMessage).filter(Boolean).slice(-60).reverse();
+      if (!items.length) return;
+      bus.replaceChildren(...items.map((event) => {
+        const row = node("li", null, "bus-row");
+        const actor = event.from_agent;
+        const initials = actor.replace(/^@?(preflight-)?/, "").slice(0, 3).toUpperCase();
+        row.append(node("span", initials, "avatar"));
+        const content = node("div");
+        const header = node("div", null, "badges");
+        header.append(node("strong", actor));
+        if (event.addressing_mode) header.append(node("span", event.addressing_mode, "pill mono"));
+        if (event.to_agent) header.append(node("span", "→ " + event.to_agent, "caption"));
+        if (event.source === "room_rehearsal") header.append(node("span", "LOCAL REHEARSAL", "pill mono"));
+        content.append(header, node("p", event.step_status + " · " + event.summary, "bus-summary"));
+        if (event.command_run) content.append(node("code", event.command_run));
+        if (Object.keys(event.proof_payload || {}).length) {
+          const details = node("details");
+          details.append(node("summary", "View stdout / JSON evidence"), node("pre", JSON.stringify(event.proof_payload, null, 2), "codebox"));
+          content.append(details);
+        }
+        row.append(content);
+        return row;
+      }));
+    }
+    function acceptEvents(events) {
+      if ((events.at(-1)?.id || 0) <= (auditEvents.at(-1)?.id || 0)) return;
+      auditEvents = events;
+      renderLedger(auditEvents);
+      renderBus();
+      renderTopology();
+    }
+    function connectBus() {
+      if (busConnection) return;
+      busConnection = new EventSource("/api/control-plane/events?after=" + (auditEvents.at(-1)?.id || 0));
+      busConnection.onopen = () => show("stream-status", "● SSE CONNECTED", "good");
+      busConnection.onerror = () => show("stream-status", "● SSE RECONNECTING", "warn");
+      busConnection.addEventListener("audit", (message) => {
+        const event = JSON.parse(message.data);
+        if (event.id > (auditEvents.at(-1)?.id || 0)) acceptEvents([...auditEvents, event]);
+      });
+    }
+    for (const [agent, id] of Object.entries(agentNodes)) {
+      $(id).onclick = () => {
+        const latest = auditEvents.findLast((event) => event.action === "handoff" && event.from_agent === agent);
+        show("topology-detail", latest ? agent + " · " + latest.summary : agent + " · Awaiting a recorded handoff.");
+      };
+    }
+    function render(state) {
+      latestState = state;
+      const {repository: repo, contracts, drift, release_gate: gate} = state;
+      const count = Number(state.payload_drift) + Number(state.env_drift) + Number(state.runbook_drift);
+      show("gate", gate === "BLOCKED" ? "RELEASE BLOCKED · " + count + " CONTRACT VIOLATION" + (count === 1 ? "" : "S")
+        : gate === "VERIFIED" ? "RELEASE VERIFIED · READY TO MERGE" : "RELEASE UNVERIFIED · CHECK TARGET", gate === "BLOCKED" ? "bad" : gate === "VERIFIED" ? "good" : "warn");
+      const remote = repo.origin.replace(/\.git$/, "");
+      link("repo", remote, remote);
+      show("branch", repo.branch); show("commit", repo.short_sha); $("commit").title = repo.commit_sha;
+      show("health", state.runtime_matches_checkout ? ":8001 · healthy" : ":8001 · checkout differs", state.runtime_matches_checkout ? "good" : "warn");
+      const pull = repo.pull_requests.items?.find((pr) => pr.headRefName === repo.branch);
+      link("pr", pull ? "GitHub PR #" + pull.number + " ↗" : repo.pull_requests.items === null ? "GitHub metadata unavailable" : "No open PR for this branch", pull?.url);
+      show("backend-limit", contracts.backend.MAX_UPLOAD_MB + " MB");
+      show("sdk-limit", contracts.frontend_sdk.allowed_upload_mb + " MB");
+      show("runbook-limit", drift.runbook_audit.documented_limits_mb.map((limit) => limit + " MB").join(", ") || "Missing");
+      show("backend-retry", contracts.backend.RETRY_ENV_VAR);
+      show("sdk-retry", contracts.frontend_sdk.expected_retry_env);
+      const documented = drift.runbook_audit.deprecated_env_vars;
+      show("runbook-retry", documented.length ? documented.join(", ") : drift.runbook_audit.required_retry_env_documented ? contracts.backend.RETRY_ENV_VAR : "Missing");
+      $("sdk-limit").classList.toggle("bad", state.payload_drift);
+      $("sdk-retry").classList.toggle("bad", state.env_drift);
+      $("runbook-limit").classList.toggle("bad", drift.runbook_audit.stale_upload_limit);
+      $("runbook-retry").classList.toggle("bad", documented.length > 0 || !drift.runbook_audit.required_retry_env_documented);
+      show("delta", drift.boundary_delta_mb + " MB delta", state.payload_drift ? "bad" : "good");
+      show("findings", state.payload_drift ? "Frontend allowance differs from backend enforcement. Confirm the affected range with a live PDF probe." : "Backend and frontend upload limits agree.");
+      show("git-label", "git diff main..HEAD" + (repo.working_tree_status ? " · local edits" : ""));
+      renderDiff(repo.head_diff, repo.working_tree_diff);
+      show("runbook-status", state.runbook_drift ? "Stale guidance" : "Runbook synchronized", state.runbook_drift ? "warn" : "good");
+      renderRunbook(contracts.runbook, drift);
+      acceptEvents(state.audit_ledger);
+      renderTopology();
+      show("discord-current", state.discord_configured ? "Discord notifications are enabled." : "Discord notifications are disabled.");
+      connectBus();
+    }
+    let active;
+    async function refresh(force = false) {
+      if (active && !force) return;
+      active?.abort();
+      const controller = new AbortController();
+      active = controller;
+      const timer = setTimeout(() => controller.abort(), 15000);
+      try {
+        const response = await fetch("/api/control-plane/state", {cache:"no-store", signal:controller.signal});
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        const data = await response.json();
+        if (active !== controller) return;
+        render(data);
+        show("connection", "● LIVE · 2s poll", "good");
+      } catch {
+        if (active === controller) {
+          show("connection", "● STATE UNAVAILABLE", "bad");
+          show("health", ":8001 · unverified", "warn");
+        }
+      } finally { clearTimeout(timer); if (active === controller) active = null; }
+    }
+    function message(value, tone) { show("notice", value, tone); $("notice").hidden = false; }
+    function renderProbe(probe) {
+      const reason = probe.http_status === 200 ? "OK" : probe.response_json?.detail?.error_code || "RESPONSE";
+      show("http-status", probe.http_status + " " + reason, probe.http_status === 200 ? "good" : "bad");
+      show("latency", probe.latency_ms + " ms · " + probe.size_bytes.toLocaleString() + " bytes · " + probe.classification);
+      show("hash", "SHA-256 " + probe.sha256);
+      show("response", JSON.stringify(probe.response_json, null, 2));
+    }
+    const buttons = ["verify","patch","reset","probe-small","probe-large","send","handoff","approve-push","discord-settings"];
+    let busy = false;
+    async function action(route, options, done) {
+      if (busy) return;
+      busy = true;
+      buttons.forEach((id) => { $(id).disabled = true; });
+      message("Executing against the live AcmePay target…");
+      try {
+        const response = await fetch("/api/control-plane/" + route, {method:"POST", signal:AbortSignal.timeout(90000), ...options});
+        const data = await response.json();
+        if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "HTTP " + response.status);
+        done(data);
+      } catch (error) { message(error.message, "bad"); }
+      finally {
+        busy = false;
+        buttons.forEach((id) => { $(id).disabled = false; });
+        void refresh(true);
+      }
+    }
+    function jsonBody(payload, token) {
+      const headers = {"Content-Type":"application/json"};
+      if (token) headers.Authorization = "Bearer " + token;
+      return {headers, body:JSON.stringify(payload)};
+    }
+    function probeAction(options) {
+      void action("probe", options, (data) => {
+        renderProbe(data);
+        message("Recorded verification evidence #" + data.ledger_event_id + ".", data.verified ? "good" : "warn");
+      });
+    }
+    $("probe-small").onclick = () => probeAction(jsonBody({size_mb:1.5, filename:"baseline-1.5mb.pdf"}));
+    $("probe-large").onclick = () => probeAction(jsonBody({size_mb:4, filename:"boundary-4mb.pdf"}));
+    $("verify").onclick = () => void action("run-verification", {}, (data) => {
+      acceptEvents(data.audit_ledger);
+      if (data.repro.probes.length) renderProbe(data.repro.probes.at(-1));
+      message("Verification complete · " + data.repro.status, data.repro.status === "VERIFIED" ? "good" : "bad");
+    });
+    $("handoff").onclick = () => void action("stream-handoff", {}, (data) => {
+      if (data.repro?.probes?.length) renderProbe(data.repro.probes.at(-1));
+      message("Live handoff complete · awaiting human approval.", "warn");
+    });
+    let selected;
+    function selectFile(file) {
+      selected = file;
+      show("file-name", file ? file.name + " · " + file.size.toLocaleString() + " bytes" : "No file selected");
+    }
+    $("file").onchange = () => selectFile($("file").files[0]);
+    $("drop").ondragover = (event) => { event.preventDefault(); $("drop").dataset.active = ""; };
+    $("drop").ondragleave = () => delete $("drop").dataset.active;
+    $("drop").ondrop = (event) => {
+      event.preventDefault();
+      delete $("drop").dataset.active;
+      if (event.dataTransfer.files.length) { $("file").value = ""; selectFile(event.dataTransfer.files[0]); }
+    };
+    $("upload").onsubmit = (event) => {
+      event.preventDefault();
+      if (!selected) { message("Choose an invoice file to send.", "warn"); return; }
+      const body = new FormData();
+      body.append("file", selected);
+      probeAction({body});
+    };
+    let mutation;
+    let publishFix = false;
+    function approve(route, publish = false) {
+      mutation = route;
+      publishFix = publish;
+      const patch = route === "remediate";
+      $("approval-form").reset();
+      $("push-option").hidden = !patch || publish;
+      show("approval-title", publish ? "Approve public GitHub push and audit comment" : patch ? "Approve contract remediation" : "Approve PR working tree reset");
+      show("approval-detail", publish ? "Apply and verify the fix, then push it to the AcmePay PR branch and post the evidence table on GitHub."
+        : patch ? "Synchronize the target SDK and runbook, then verify against the live API."
+        : "Restore the known unpatched SDK and runbook from the original security commit.");
+      $("approval").showModal();
+    }
+    $("patch").onclick = () => approve("remediate");
+    $("approve-push").onclick = () => approve("remediate", true);
+    $("reset").onclick = () => approve("checkout-unpatched");
+    $("cancel").onclick = () => $("approval").close();
+    $("approval").addEventListener("close", () => $("approval-form").reset());
+    $("approval-form").onsubmit = (event) => {
+      event.preventDefault();
+      const data = new FormData(event.currentTarget);
+      const body = {approval_id:data.get("approval_id")};
+      if (mutation === "remediate") {
+        body.push = publishFix || data.get("push") === "on";
+        body.comment_pr = publishFix;
+      }
+      $("approval").close();
+      void action(mutation, jsonBody(body, data.get("token")), (result) => {
+        const comment = result.github_comment;
+        message(result.status + (result.push_error ? " · " + result.push_error : "") +
+          (comment ? " · GitHub comment " + comment.status.toLowerCase() : ""),
+          result.status === "PUSH_FAILED" || comment?.status === "FAILED" ? "bad" : "good");
+        if (result.verification?.probes.length) renderProbe(result.verification.probes.at(-1));
+      });
+    };
+    $("discord-settings").onclick = () => {
+      $("discord-form").reset();
+      $("discord-dialog").showModal();
+    };
+    $("discord-cancel").onclick = () => $("discord-dialog").close();
+    $("discord-dialog").addEventListener("close", () => $("discord-form").reset());
+    $("discord-form").onsubmit = (event) => {
+      event.preventDefault();
+      const data = new FormData(event.currentTarget);
+      $("discord-dialog").close();
+      void action("discord-settings", jsonBody({approval_id:"workbench-notification-settings", webhook_url:data.get("webhook_url")}, data.get("token")),
+        (result) => message(result.configured ? "Discord notifications enabled." : "Discord notifications disabled.", "good"));
+    };
+    void refresh();
+    setInterval(refresh, 2000);
+  </script>
+</body>
+</html>

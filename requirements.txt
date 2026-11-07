@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+httpx
+pydantic
+python-multipart
+pytest
+langgraph
+google-genai
+google-adk
+python-dotenv
+PyYAML

@@ -1,0 +1,39 @@
+# How We Built PreFlight on Switch: Catching Cross-Boundary API Drift and Stale Runbooks with Multi-Agent Chat Rooms
+
+A green test suite can tell you that an upload endpoint obeys its new limit. It can still leave you shipping a merchant client that promises a larger one. In our AcmePay example, a backend security change lowered the invoice limit from 10 MB to 2 MB and moved the retry setting from `LEGACY_RETRY_LIMIT` to `MAX_RETRIES_V2`. Backend tests still passed. The merchant SDK still permitted 10 MB, and the on-call runbook still told responders to export the old variable. We built PreFlight to put those facts in front of a release lead while the pull request was open.
+
+## Reproduce the contract a customer encounters
+
+The experiment starts with two repositories. [AcmePay Invoice Service](https://github.com/varmaleena/acmepay-invoice-service) contains the FastAPI service, Python SDK, and runbook. [PreFlight](https://github.com/varmaleena/preflight-switch) is a separate control plane. The [security pull request](https://github.com/varmaleena/acmepay-invoice-service/pull/1) changes only the backend policy file. That separation matters because a verifier should consume evidence through the same API boundary as an external release tool. It also means we can show the exact PR diff without inventing a drift toggle.
+
+On startup, AcmePay exposes its Git revision and enforcement settings through `/health`. Its `/contract-manifest` returns the backend policy, client configuration, and runbook text. PreFlight also reads the target checkout directly. It parses the Python assignments with the AST and evaluates only the relevant literals. It compares the checkout with the live manifest and revision. If the server is running from a different checkout, the gate reports that it cannot verify the release. That distinction keeps a stale server from producing a convincing but misleading green result.
+
+The interesting test is an actual multipart request. PreFlight builds deterministic one-page PDFs with a PDF header, objects, cross-reference table, and padding to the exact requested byte count. The 1.5 MB baseline uses 1,572,864 bytes. The 4 MB probe uses 4,194,304. The verifier hashes the bytes before sending them, measures round-trip latency, and saves the response. For an accepted upload it also checks that the receipt prefix returned by AcmePay matches the locally computed hash.
+
+On the drifted branch, the baseline returns HTTP 200 and the 4 MB file returns HTTP 413 with `PAYLOAD_CONTRACT_VIOLATION`. The verifier records a cross-boundary regression because the SDK allows the exact size that the backend rejects. That last comparison is the difference between evidence of a bug and an expected rejection. A backend unit test can correctly assert that any file over 2 MB is rejected and still miss the SDK promising something different.
+
+## Make the handoff visible
+
+A verification finding often moves between a developer, a tester, and an on-call lead. A checklist can describe those roles, but it rarely captures the exact evidence each person saw. We used a [Switch room template](../preflight.template.yaml) to make the roles addressable in one room. The template configures the Codex provider, the machine that can reach both services, the working directory, and the messaging bridge. A team can keep the discussion in Slack or Discord with the release evidence in the same thread. [Switch templates](https://docs.switchagents.ai/switch-rooms/administer/room-templates)
+
+The triager is addressable by anyone in the room. It compares the PR diff and live manifest, then routes the binary test and runbook review by name. The repro and runbook agents use `owner-agents` addressing. Switch permits the owner and their agents to address those agents, while the repro instructions check that the routed request came from the designated triager. The restriction limits who can start a handoff. It does not substitute for authorization to change a repository. [Switch agent protocol](https://docs.switchagents.ai/switch-rooms/internals/agent-protocol)
+
+We made the difference visible in the workbench. The topology shows the GitHub revision, triager, repro agent, runbook agent, and live service. Its timeline reads persisted start and finish events. Each event connects a sender, a recipient, and an evidence record. A viewer can expand the actual HTTP body or patch diff instead of relying on a chat summary. The Switch relay can forward incoming room events over HTTP and send an explicitly requested message through the agent bridge. A local rehearsal uses the same checks and API but labels its transcript so it cannot be mistaken for messages from a connected room.
+
+## Keep the release decision grounded in evidence
+
+The third check examines the operational instructions. The runbook still tells responders to use the old retry variable and a 10 MB limit. Imagine diagnosing a spike in upload failures while following those instructions. The initial response can make an already confusing incident harder to narrow down. The proposed patch updates the SDK limit, its expected variable, and version, then aligns the runbook’s limits and recovery command with the live backend policy.
+
+Applying that patch is a separate step. The release lead supplies an approval reference and an operator credential. PreFlight checks the expected branch and refuses unrelated edits before touching the two contract files. It re-reads the live manifest and repeats the probes after writing. When the 4 MB PDF still returns HTTP 413, both sides now reject it, and the 1.5 MB PDF still succeeds. That is the correct verified outcome. Raising the backend limit to make the bigger fixture pass would undo the security change rather than reconcile the contracts.
+
+For teams that want the evidence near the review, PreFlight can post a Markdown audit table directly to the open pull request. It can also send step summaries to a configured Discord webhook. Neither notification determines the release state. The state comes from the checkout, the server, and the observed bytes. That design means a missing notification credential never turns an unverified result into a verified one.
+
+When the workbench reconnects, its SSE cursor lets it pick up after the last observed ledger entry. That matters during a demo, but it matters more when a reviewer opens the page after a probe already ran. They can still inspect the terminal evidence and see who owns the next action. A snapshot supplies the current gate while the stream supplies the order of events.
+
+## What we would carry into a real release process
+
+First, make the reproducer small enough to run during review. Two deterministic PDFs established both the healthy path and the broken boundary. Second, put revision identity beside the evidence. A hash of a payload helps someone reproduce the request, while a commit SHA identifies the release that answered it. Finally, make the authorization step explicit. Chat can route work and collect context, while a separate operator credential controls changes to the checkout or PR branch.
+
+There are deliberate limits to the demo. The audit ledger is local and append-only through the application, so it is not a substitute for an organization’s durable audit store. The sample PDFs contain no merchant records. The optional Gemini advisory receives summary flags, and the deterministic verifier owns the gate decision. A release team can adopt the same pattern while replacing the storage, deployment, and approval integrations to match its environment.
+
+Start with a clean checkout and the published security PR. Open the workbench, follow the handoff, and compare the 4 MB result before and after reconciliation. The HTTP status stays the same. The contract changes around it. That’s the evidence we wanted reviewers to be able to see before merging.

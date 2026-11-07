@@ -1,0 +1,42 @@
+name: preflight-switch
+
+x-runtime: &runtime
+  image: preflight-switch-demo:local
+  build: .
+  user: "${PREFLIGHT_CONTAINER_UID:-10001}:${PREFLIGHT_CONTAINER_GID:-10001}"
+
+services:
+  acmepay-invoice-service:
+    <<: *runtime
+    working_dir: /target
+    command: ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8001"]
+    environment:
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: safe.directory
+      GIT_CONFIG_VALUE_0: /target
+    ports: ["127.0.0.1:8001:8001"]
+    volumes:
+      - "${ACMEPAY_REPO_PATH:-../acmepay-invoice-service}:/target:ro"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3)"]
+      interval: 5s
+      timeout: 4s
+      retries: 10
+
+  preflight-control-plane:
+    <<: *runtime
+    env_file: .env
+    environment:
+      TARGET_REPO_PATH: /target
+      TARGET_API_URL: http://acmepay-invoice-service:8001
+      PREFLIGHT_LEDGER_PATH: /app/data/audit_ledger.json
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: safe.directory
+      GIT_CONFIG_VALUE_0: /target
+    ports: ["127.0.0.1:8000:8000"]
+    volumes:
+      - "${ACMEPAY_REPO_PATH:-../acmepay-invoice-service}:/target"
+      - "./data:/app/data"
+    depends_on:
+      acmepay-invoice-service:
+        condition: service_healthy
