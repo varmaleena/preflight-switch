@@ -200,7 +200,7 @@
           <form id="upload"><label class="drop" id="drop">Drop a real invoice or choose a file<input type="file" id="file" aria-describedby="file-name"><span class="caption" id="file-name">No file selected</span></label><button class="btn primary" type="submit" id="send">Send real file</button></form>
           <div class="telemetry" role="status"><span class="pill mono" id="http-status">Awaiting probe</span><span class="caption" id="latency">— ms</span></div><p class="mono" id="hash">SHA-256 —</p>
         </div><pre class="codebox" id="response" tabindex="0">Live response JSON will appear here.</pre></article>
-        <article class="card"><div class="card-head"><h3>SRE runbook</h3><span class="pill mono" id="runbook-status">Checking</span></div><pre class="codebox runbook" id="runbook" tabindex="0">Waiting for docs/oncall-runbook.md…</pre><div class="card-head"><h3>Append-only audit ledger</h3><span class="pill mono" id="event-count">0 events</span></div><ul class="ledger" id="ledger" tabindex="0"><li class="empty">Waiting for recorded evidence…</li></ul></article>
+        <article class="card"><div class="card-head"><h3>SRE runbook</h3><span class="pill mono" id="runbook-status">Checking</span></div><pre class="codebox runbook" id="runbook" tabindex="0">Waiting for docs/oncall-runbook.md…</pre><div class="card-head"><h3>Audit ledger · newest first</h3><span class="pill mono" id="event-count">0 events</span></div><ul class="ledger" id="ledger" tabindex="0"><li class="empty">Waiting for recorded evidence…</li></ul></article>
       </div>
     </section>
     </div>
@@ -317,6 +317,9 @@
       badge.dataset.origin = origin;
       return badge;
     }
+    const ledgerTime = new Intl.DateTimeFormat(undefined, {
+      month:"short", day:"numeric", hour:"numeric", minute:"2-digit", second:"2-digit", timeZoneName:"short",
+    });
     function renderLedger(events) {
       const list = $("ledger");
       const latest = events.at(-1)?.id ?? 0;
@@ -331,9 +334,9 @@
         const title = event.agent_name || (event.source === "switch" ? "Switch Room event" : event.action);
         const status = node("span", event.status, "pill mono");
         status.dataset.tone = /REGRESSION|BLOCKED|ERROR|FAILED/.test(event.status) ? "bad" : "good";
-        const time = node("time", event.timestamp.slice(11, 19) + " UTC");
+        const time = node("time", ledgerTime.format(new Date(event.timestamp)));
         time.dateTime = event.timestamp;
-        header.append(node("strong", title), originBadge(event.event_origin), status, time);
+        header.append(node("strong", title), node("code", "#" + event.id), originBadge(event.event_origin), status, time);
         row.append(header);
         if (event.source === "room_rehearsal") {
           row.append(node("span", "LOCAL ROOM REHEARSAL", "caption"));
