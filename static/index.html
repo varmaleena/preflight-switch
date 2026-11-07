@@ -49,23 +49,88 @@
     .node-pr{grid-area:1 / 1 / 3 / 2}.node-triage{grid-area:1 / 2 / 3 / 3}.node-repro{grid-area:1 / 3 / 2 / 4}.node-runbook{grid-area:2 / 3 / 3 / 4}.node-service{grid-area:1 / 4 / 3 / 5}
     .bus{max-height:290px}.bus-row{display:grid;grid-template-columns:29px minmax(0,1fr);gap:7px}.bus-row .avatar{width:28px;height:28px}.bus-summary{margin-top:4px;color:var(--mute)}
     .topology-detail{min-height:32px;padding:6px 12px;border-top:1px solid var(--line);color:var(--mute);font-size:11px}
+    :root{--header-height:112px;--glass:color-mix(in srgb,var(--card) 88%,transparent);--shadow:0 8px 28px #17255409}
+    [data-theme=dark]{--shadow:0 8px 28px #0003;--bad:#ff9ba8;--bad-bg:#fa53661a}
+    body,.card,.hero,.btn,.pill,.tab,.topo-node,.codebox,.repo-box,.agent{transition:background-color .22s ease,color .22s ease,border-color .22s ease,box-shadow .22s ease}
+    .bar{position:fixed;inset:0 0 auto;z-index:5;background:var(--glass);backdrop-filter:blur(18px) saturate(135%);box-shadow:var(--shadow)}
+    .nav{height:62px;min-height:62px}
+    .tabs{display:flex;gap:4px;align-items:stretch;overflow-x:auto;scrollbar-width:none;height:49px}
+    .tabs::-webkit-scrollbar{display:none}
+    .tab{position:relative;display:flex;align-items:center;justify-content:center;gap:8px;flex:none;padding:0 12px;border:0;border-radius:7px 7px 0 0;background:transparent;color:var(--mute);font-size:12px;font-weight:650;white-space:nowrap}
+    .tab:hover{background:var(--soft);color:var(--text)}
+    .tab[aria-selected=true]{color:var(--accent);background:color-mix(in srgb,var(--accent-bg) 50%,transparent)}
+    .tab[aria-selected=true]::after{position:absolute;content:"";inset:auto 9px 0;height:2px;border-radius:3px;background:var(--accent)}
+    .tab svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round}
+    .tab:focus-visible{outline-offset:-4px}
+    main{padding-top:calc(var(--header-height) + 24px)}
+    .view{animation:view-enter .22s ease both;min-width:0}
+    .view > section:first-child{margin-top:0}
+    @keyframes view-enter{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+    .live-indicator[data-tone=good]::before{content:"";width:6px;height:6px;flex:none;border-radius:50%;background:currentColor;box-shadow:0 0 0 0 color-mix(in srgb,var(--good) 45%,transparent);animation:live-ring 1.9s ease-out infinite}
+    @keyframes live-ring{65%,100%{box-shadow:0 0 0 5px transparent}}
+    .gate[data-tone=bad]{border-color:color-mix(in srgb,var(--bad) 30%,var(--line));box-shadow:0 0 18px color-mix(in srgb,var(--bad) 9%,transparent)}
+    .overview-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:14px}
+    .metric{padding:15px;box-shadow:var(--shadow)}
+    .metric .metric-value{font:650 19px/1.45 var(--mono);letter-spacing:-.055em;overflow-wrap:anywhere;margin-top:3px}
+    .metric p{font-size:11px;color:var(--mute);margin-top:3px}
+    .metric[data-alert=true]{border-color:color-mix(in srgb,var(--bad) 30%,var(--line))}
+    .metric[data-alert=true] .metric-value{color:var(--bad)}
+    .quick-card{margin-top:14px;padding:13px 15px}
+    .quick-card .actions{margin-top:6px}
+    .view-lead{color:var(--mute);font-size:12px;margin:-2px 0 11px 32px}
+    #notice{margin:0 0 12px}
+    @media(max-width:680px){.overview-grid{grid-template-columns:1fr}.metric{padding:11px 13px}.metric .metric-value{font-size:16px}}
+    @media(max-width:540px){:root{--header-height:102px}.nav{height:57px;min-height:57px}.tabs{height:44px}.tab{padding-inline:9px;font-size:11px}.nav-right{gap:5px}.nav-right .btn{padding-inline:6px}.nav-right #theme{width:32px}.nav-right .pill{font-size:9px}.view-lead{margin-left:0}}
+    @media(max-width:380px){.nav{gap:5px}#discord-settings{font-size:0}#discord-settings::after{content:"Discord";font-size:11px}}
     @media(max-width:1150px){.topology-grid{grid-template-columns:1fr}}
-    @media(prefers-reduced-motion:reduce){.packet.active,.topo-node[data-gate]{animation:none}}
+    @media(prefers-reduced-motion:reduce){.packet.active,.topo-node[data-gate],.view,.live-indicator[data-tone=good]::before{animation:none}body,.card,.hero,.btn,.pill,.tab,.topo-node,.codebox,.repo-box,.agent{transition:none}}
   </style>
 </head>
 <body class="antialiased">
   <header class="bar"><div class="wrap nav">
     <div class="brand"><svg width="31" height="31" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#5344d0"/><path d="m8 21 8-11h8l-8 11zm0-5h6l-4 5H8z" fill="white"/></svg><span>PreFlight</span><span>Release Workbench</span></div>
-    <div class="nav-right"><span class="pill mono" id="connection" role="status">Connecting</span><button type="button" class="btn" id="discord-settings">Discord settings</button><button type="button" class="btn" id="theme" aria-label="Switch to dark mode">☾</button></div>
-  </div></header>
+    <div class="nav-right"><span class="pill mono live-indicator" id="connection" role="status">Connecting</span><button type="button" class="btn" id="discord-settings">Discord settings</button><button type="button" class="btn" id="theme" aria-label="Switch to dark mode">☾</button></div>
+  </div>
+    <nav class="wrap tabs" role="tablist" aria-label="Control plane views">
+      <button type="button" class="tab" id="tab-overview" role="tab" aria-selected="true" aria-controls="view-overview"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Overview</button>
+      <button type="button" class="tab" id="tab-switch-room" role="tab" aria-selected="false" aria-controls="view-switch-room" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="m7 11 10-5m-10 7 10 5"/></svg>Switch Room &amp; Agent Topology</button>
+      <button type="button" class="tab" id="tab-contracts" role="tab" aria-selected="false" aria-controls="view-contracts" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16m-10-9V7m5 10v-3"/><circle cx="10" cy="12" r="2"/><circle cx="15" cy="19" r="2"/></svg>Contract Parity &amp; Git Diff</button>
+      <button type="button" class="tab" id="tab-sandbox" role="tab" aria-selected="false" aria-controls="view-sandbox" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6m-5 0v7l-5 8a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-8V3M8 16h8"/></svg>Sandbox Probe &amp; Runbook</button>
+    </nav>
+  </header>
   <main class="wrap">
+    <p class="notice" id="notice" role="status" hidden></p>
+    <div class="view" id="view-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0">
     <div class="hero">
       <div><div class="eyebrow">AcmePay / Release Engineering</div><h1>Autonomous Cross-Boundary Release &amp; Runbook Gate</h1><p>Powered by Switch</p><span class="pill gate" id="gate" role="status">CHECKING RELEASE</span></div>
       <div class="repo-box"><div class="caption">LIVE TARGET REPOSITORY</div><a id="repo">Waiting for checkout</a><div class="badges"><span class="pill mono" id="branch">—</span><span class="pill mono" id="commit">—</span><span class="pill mono" id="health">:8001 · checking</span></div></div>
     </div>
-    <p class="notice" id="notice" role="status" hidden></p>
+    <div class="overview-grid" aria-label="Current release findings">
+      <article class="card metric" id="metric-payload"><div class="eyebrow">Upload contract</div><div class="metric-value" id="metric-payload-value">—</div><p id="metric-payload-note">Waiting for backend and SDK limits.</p></article>
+      <article class="card metric" id="metric-retry"><div class="eyebrow">Runtime retry variable</div><div class="metric-value" id="metric-retry-value">—</div><p id="metric-retry-note">Waiting for the live environment contract.</p></article>
+      <article class="card metric" id="metric-runbook"><div class="eyebrow">On-call readiness</div><div class="metric-value" id="metric-runbook-value">—</div><p id="metric-runbook-note">Waiting for the deployed runbook.</p></article>
+    </div>
+    <div class="card quick-card"><div class="eyebrow">Open workbench</div><div class="actions">
+      <button type="button" class="btn primary" id="overview-handoff">Stream live handoff <span aria-hidden="true">↗</span></button>
+      <button type="button" class="btn" data-open-tab="contracts">Review contract differences <span aria-hidden="true">↗</span></button>
+      <button type="button" class="btn" data-open-tab="sandbox">Open probe sandbox <span aria-hidden="true">↗</span></button>
+    </div></div>
+    <section aria-labelledby="pipeline-title">
+      <div class="heading"><span class="section-num">01</span><h2 id="pipeline-title">Switch Multi-Agent Room Pipeline</h2><span class="pill mono section-side" data-tone="accent">#acmepay-preflight</span></div>
+      <div class="card card-body">
+        <div class="agents">
+          <div class="agent"><span class="avatar">TRI</span><div><strong>@preflight-triager</strong><span class="pill mono" data-tone="accent">anyone</span><small>Contract &amp; PR Diff Auditor</small></div></div>
+          <div class="agent"><span class="avatar">REP</span><div><strong>@preflight-repro</strong><span class="pill mono">owner-agents</span><small>Sandboxed Binary Multipart Runner</small></div></div>
+          <div class="agent"><span class="avatar">RUN</span><div><strong>@preflight-runbook</strong><span class="pill mono">owner-agents</span><small>Stale Runbook &amp; SDK Reconciler</small></div></div>
+        </div>
+        <div class="actions"><button type="button" class="btn" id="verify">Run Live Multi-Agent Audit &amp; Binary Repro</button><button type="button" class="btn" id="patch">Apply Verified Contract &amp; Runbook Patch</button><button type="button" class="btn" id="approve-push">Approve &amp; Push Fix to GitHub PR #402</button><button type="button" class="btn" id="reset">Reset Target PR Working Tree</button></div>
+      </div>
+    </section>
+    </div>
+    <div class="view" id="view-switch-room" role="tabpanel" aria-labelledby="tab-switch-room" tabindex="0" hidden>
     <section aria-labelledby="topology-title">
       <div class="heading"><span class="section-num">◎</span><h2 id="topology-title">Live Switch Room Topology &amp; Agent Interaction Canvas</h2><span class="pill mono section-side" id="stream-status">Connecting SSE</span></div>
+      <p class="view-lead">Follow the live handoff from Git revision to binary evidence and operator review.</p>
       <div class="grid-two topology-grid">
         <article class="card"><div class="card-head"><h3>Release evidence path</h3><button class="btn primary" type="button" id="handoff">Stream Live Room Handoff</button></div>
           <div class="canvas-scroll" tabindex="0" aria-label="Scrollable agent topology">
@@ -90,19 +155,11 @@
         <article class="card"><div class="card-head"><h3>Switch Room Live Bus</h3><span class="pill mono" data-tone="accent">#acmepay-preflight</span></div><ul class="ledger bus" id="bus" tabindex="0"><li class="empty">Waiting for room activity.</li></ul></article>
       </div>
     </section>
-    <section aria-labelledby="pipeline-title">
-      <div class="heading"><span class="section-num">01</span><h2 id="pipeline-title">Switch Multi-Agent Room Pipeline</h2><span class="pill mono section-side" data-tone="accent">#acmepay-preflight</span></div>
-      <div class="card card-body">
-        <div class="agents">
-          <div class="agent"><span class="avatar">TRI</span><div><strong>@preflight-triager</strong><span class="pill mono" data-tone="accent">anyone</span><small>Contract &amp; PR Diff Auditor</small></div></div>
-          <div class="agent"><span class="avatar">REP</span><div><strong>@preflight-repro</strong><span class="pill mono">owner-agents</span><small>Sandboxed Binary Multipart Runner</small></div></div>
-          <div class="agent"><span class="avatar">RUN</span><div><strong>@preflight-runbook</strong><span class="pill mono">owner-agents</span><small>Stale Runbook &amp; SDK Reconciler</small></div></div>
-        </div>
-        <div class="actions"><button type="button" class="btn primary" id="verify">Run Live Multi-Agent Audit &amp; Binary Repro</button><button type="button" class="btn" id="patch">Apply Verified Contract &amp; Runbook Patch</button><button type="button" class="btn" id="approve-push">Approve &amp; Push Fix to GitHub PR #402</button><button type="button" class="btn" id="reset">Reset Target PR Working Tree</button></div>
-      </div>
-    </section>
+    </div>
+    <div class="view" id="view-contracts" role="tabpanel" aria-labelledby="tab-contracts" tabindex="0" hidden>
     <section aria-labelledby="matrix-title">
       <div class="heading"><span class="section-num">02</span><h2 id="matrix-title">Cross-Boundary Contract Matrix</h2><a class="section-side caption" id="pr"></a></div>
+      <p class="view-lead">Compare the running API, checked-out SDK, and runbook against the Git change under review.</p>
       <div class="grid-two">
         <article class="card"><div class="card-head"><h3>Policy parity</h3><span class="pill mono" id="delta">—</span></div>
           <div class="table-wrap"><table><thead><tr><th scope="col">Contract</th><th scope="col">Backend runtime</th><th scope="col">Frontend SDK</th><th scope="col">SRE runbook</th></tr></thead>
@@ -111,8 +168,11 @@
         <article class="card"><div class="card-head"><h3>Unified Git diff</h3><span class="caption" id="git-label">git diff main..HEAD</span></div><pre class="codebox" id="diff" tabindex="0">Waiting for Git evidence…</pre></article>
       </div>
     </section>
+    </div>
+    <div class="view" id="view-sandbox" role="tabpanel" aria-labelledby="tab-sandbox" tabindex="0" hidden>
     <section aria-labelledby="probe-title">
       <div class="heading"><span class="section-num">03</span><h2 id="probe-title">Live Multipart Probe &amp; Runbook Audit</h2><span class="caption section-side">:8001 /v1/invoices/upload</span></div>
+      <p class="view-lead">Send actual invoice bytes and inspect the receipt, response, and supporting operational evidence.</p>
       <div class="grid-two">
         <article class="card"><div class="card-head"><h3>Binary invoice verifier</h3><span class="pill mono">application/pdf</span></div><div class="card-body">
           <div class="actions"><button type="button" class="btn" id="probe-small">1.5 MB PDF · Within both limits</button><button type="button" class="btn" id="probe-large">4.0 MB PDF · Verify boundary</button></div>
@@ -122,6 +182,7 @@
         <article class="card"><div class="card-head"><h3>SRE runbook</h3><span class="pill mono" id="runbook-status">Checking</span></div><pre class="codebox runbook" id="runbook" tabindex="0">Waiting for docs/oncall-runbook.md…</pre><div class="card-head"><h3>Append-only audit ledger</h3><span class="pill mono" id="event-count">0 events</span></div><ul class="ledger" id="ledger" tabindex="0"><li class="empty">Waiting for recorded evidence…</li></ul></article>
       </div>
     </section>
+    </div>
     <footer class="foot"><span>PREFLIGHT / RELEASE CONTROL</span><a href="/docs">API documentation</a></footer>
   </main>
   <dialog id="approval"><form id="approval-form"><h2 id="approval-title">Human sign-off</h2><p id="approval-detail"></p><label>Approval reference<input name="approval_id" required maxlength="200" placeholder="Change ticket or approval ID"></label><label>Operator token<input name="token" type="password" required autocomplete="off"></label><label class="check" id="push-option"><input name="push" type="checkbox"> Commit and push the verified patch to the PR branch</label><div class="actions"><button type="button" class="btn" id="cancel">Cancel</button><button type="submit" class="btn primary">Confirm operation</button></div></form></dialog>
@@ -130,6 +191,43 @@
     "use strict";
     const $ = (id) => document.getElementById(id);
     const root = document.documentElement;
+    const tabs = [...document.querySelectorAll('[role="tab"]')];
+    const views = tabs.map((tab) => tab.id.slice(4));
+    let activeView;
+
+    function openView(requested, {remember = true, focusTab = false} = {}) {
+      const view = views.includes(requested) ? requested : "overview";
+      for (const name of views) {
+        const selected = name === view;
+        const tab = $("tab-" + name);
+        tab.setAttribute("aria-selected", String(selected));
+        tab.tabIndex = selected ? 0 : -1;
+        $("view-" + name).hidden = !selected;
+      }
+      if (activeView !== view) window.scrollTo({top:0, behavior:"instant"});
+      activeView = view;
+      const tab = $("tab-" + view);
+      tab.scrollIntoView({block:"nearest", inline:"nearest"});
+      if (focusTab) tab.focus({preventScroll:true});
+      if (remember && location.hash !== "#" + view) history.replaceState(null, "", "#" + view);
+    }
+
+    tabs.forEach((tab, index) => {
+      tab.addEventListener("click", () => openView(views[index]));
+      tab.addEventListener("keydown", (event) => {
+        const adjacent = {ArrowLeft:(index + tabs.length - 1) % tabs.length, ArrowRight:(index + 1) % tabs.length,
+                          Home:0, End:tabs.length - 1};
+        if (!(event.key in adjacent)) return;
+        event.preventDefault();
+        openView(views[adjacent[event.key]], {focusTab:true});
+      });
+    });
+    window.addEventListener("hashchange", () => openView(location.hash.slice(1), {remember:false}));
+    document.querySelectorAll("[data-open-tab]").forEach((button) => {
+      button.addEventListener("click", () => openView(button.dataset.openTab, {focusTab:true}));
+    });
+    openView(location.hash.slice(1), {remember:false});
+
     function show(id, value, tone) {
       const element = $(id);
       const next = String(value ?? "—");
@@ -361,6 +459,15 @@
       $("runbook-limit").classList.toggle("bad", drift.runbook_audit.stale_upload_limit);
       $("runbook-retry").classList.toggle("bad", documented.length > 0 || !drift.runbook_audit.required_retry_env_documented);
       show("delta", drift.boundary_delta_mb + " MB delta", state.payload_drift ? "bad" : "good");
+      show("metric-payload-value", contracts.backend.MAX_UPLOAD_MB + " MB / " + contracts.frontend_sdk.allowed_upload_mb + " MB");
+      show("metric-payload-note", state.payload_drift ? "Backend / SDK · " + drift.boundary_delta_mb + " MB contract gap" : "Backend and SDK limits agree.");
+      show("metric-retry-value", contracts.backend.RETRY_ENV_VAR);
+      show("metric-retry-note", state.env_drift ? "SDK expects " + contracts.frontend_sdk.expected_retry_env : "Backend and SDK use the same variable.");
+      show("metric-runbook-value", state.runbook_drift ? "Guidance stale" : "Synchronized");
+      show("metric-runbook-note", state.runbook_drift ? "Documented limits or retry instructions differ." : "Operational guidance matches runtime policy.");
+      $("metric-payload").dataset.alert = state.payload_drift;
+      $("metric-retry").dataset.alert = state.env_drift;
+      $("metric-runbook").dataset.alert = state.runbook_drift;
       show("findings", state.payload_drift ? "Frontend allowance differs from backend enforcement. Confirm the affected range with a live PDF probe." : "Backend and frontend upload limits agree.");
       show("git-label", "git diff main..HEAD" + (repo.working_tree_status ? " · local edits" : ""));
       renderDiff(repo.head_diff, repo.working_tree_diff);
@@ -384,7 +491,7 @@
         const data = await response.json();
         if (active !== controller) return;
         render(data);
-        show("connection", "● LIVE · 2s poll", "good");
+        show("connection", "LIVE · 2s poll", "good");
       } catch {
         if (active === controller) {
           show("connection", "● STATE UNAVAILABLE", "bad");
@@ -400,7 +507,7 @@
       show("hash", "SHA-256 " + probe.sha256);
       show("response", JSON.stringify(probe.response_json, null, 2));
     }
-    const buttons = ["verify","patch","reset","probe-small","probe-large","send","handoff","approve-push","discord-settings"];
+    const buttons = ["verify","patch","reset","probe-small","probe-large","send","handoff","overview-handoff","approve-push","discord-settings"];
     let busy = false;
     async function action(route, options, done) {
       if (busy) return;
@@ -441,6 +548,10 @@
       if (data.repro?.probes?.length) renderProbe(data.repro.probes.at(-1));
       message("Live handoff complete · awaiting human approval.", "warn");
     });
+    $("overview-handoff").onclick = () => {
+      openView("switch-room", {focusTab:true});
+      $("handoff").click();
+    };
     let selected;
     function selectFile(file) {
       selected = file;
