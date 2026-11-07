@@ -114,15 +114,17 @@
       <div><div class="eyebrow">AcmePay / Release Engineering</div><h1>Human-Approved Release-Verification Room</h1><p>A Switch-native, human-approved multi-agent release-verification room for API contract drift.</p><span class="pill gate" id="gate" role="status">AWAITING VERIFICATION</span><p id="overview-evidence">Start a verification run in Discord or use Run Local Orchestration.</p></div>
       <div class="repo-box"><div class="caption">CONFIGURED GITHUB PR / CHECKOUT</div><a id="repo">Waiting for checkout</a><div class="badges"><span class="pill mono" id="branch">—</span><span class="pill mono" id="commit">—</span><span class="pill mono" id="health">:8001 · checking</span></div><p id="demo-revision" role="status">Checking inspection revision.</p></div>
     </div>
+    <p class="topology-detail" id="overview-review" role="status" hidden></p>
     <div class="overview-grid" id="overview-findings" aria-label="Latest verification findings" hidden>
       <article class="card metric" id="metric-payload"><div class="eyebrow">Upload contract</div><div class="metric-value" id="metric-payload-value">—</div><p id="metric-payload-note">Waiting for backend and SDK limits.</p></article>
       <article class="card metric" id="metric-retry"><div class="eyebrow">Runtime retry variable</div><div class="metric-value" id="metric-retry-value">—</div><p id="metric-retry-note">Waiting for the live environment contract.</p></article>
       <article class="card metric" id="metric-runbook"><div class="eyebrow">On-call readiness</div><div class="metric-value" id="metric-runbook-value">—</div><p id="metric-runbook-note">Waiting for the runbook from the configured local target.</p></article>
     </div>
-    <div class="card quick-card"><div class="eyebrow">Open workbench</div><div class="actions">
-      <button type="button" class="btn primary" id="overview-handoff">Run Local Orchestration <span aria-hidden="true">↗</span></button>
-      <button type="button" class="btn" data-open-tab="contracts">Review contract differences <span aria-hidden="true">↗</span></button>
-      <button type="button" class="btn" data-open-tab="sandbox">Open probe sandbox <span aria-hidden="true">↗</span></button>
+    <div class="card quick-card"><div class="eyebrow">Start a release review</div><div class="actions">
+      <a class="btn primary" href="https://discord.com/channels/1568584928759783567/1568585020472561744" target="_blank" rel="noopener">Open Discord review <span aria-hidden="true">↗</span></a>
+      <button type="button" class="btn" data-copy-kickoff>Copy kickoff</button>
+      <button type="button" class="btn" data-open-tab="contracts">Inspect contract inputs <span aria-hidden="true">↗</span></button>
+      <button type="button" class="btn" data-open-tab="sandbox">Open manual probe sandbox <span aria-hidden="true">↗</span></button>
     </div></div>
     <section aria-labelledby="pipeline-title">
       <div class="heading"><span class="section-num">01</span><h2 id="pipeline-title">Switch Multi-Agent Room Pipeline</h2><span class="pill mono section-side" data-tone="accent">#acmepay-preflight</span></div>
@@ -143,7 +145,7 @@
       <p class="view-lead">A Discord kickoff starts a run. Follow its handoffs, probe results, and approval here.</p>
       <div class="room-tools"><span class="pill" id="switch-health-room" role="status">Checking Switch</span><button type="button" class="btn" data-copy-kickoff>Copy Switch Room Kickoff Prompt</button></div>
       <div class="grid-two topology-grid">
-        <article class="card"><div class="card-head"><h3>Release evidence path</h3><button class="btn primary" type="button" id="handoff">Run Local Orchestration</button></div>
+        <article class="card"><div class="card-head"><h3>Release evidence path</h3><button class="btn" type="button" id="handoff">Run Local Orchestration</button></div>
           <p class="topology-detail" role="status"><strong id="topo-run-status">Awaiting kickoff</strong> <span id="topo-run-detail">· Send the kickoff in Discord to start a new run.</span></p>
           <div class="canvas-scroll" tabindex="0" aria-label="Scrollable agent topology">
             <div class="canvas">
@@ -181,7 +183,7 @@
     <div class="view" id="view-contracts" role="tabpanel" aria-labelledby="tab-contracts" tabindex="0" hidden>
     <section aria-labelledby="matrix-title">
       <div class="heading"><span class="section-num">02</span><h2 id="matrix-title">Cross-Boundary Contract Matrix</h2><a class="section-side caption" id="pr"></a></div>
-      <p class="view-lead">Compare the running API, checked-out SDK, and runbook against the Git change under review.</p>
+      <p class="view-lead">Inspect the current API, SDK, runbook, and Git diff. Start a Discord review to collect the probe evidence and proposed fix.</p>
       <div class="grid-two">
         <article class="card"><div class="card-head"><h3>Policy parity</h3><span class="pill mono" id="delta">—</span></div>
           <div class="table-wrap"><table><thead><tr><th scope="col">Contract</th><th scope="col">Backend runtime</th><th scope="col">Frontend SDK</th><th scope="col">SRE runbook</th></tr></thead>
@@ -194,12 +196,12 @@
     <div class="view" id="view-sandbox" role="tabpanel" aria-labelledby="tab-sandbox" tabindex="0" hidden>
     <section aria-labelledby="probe-title">
       <div class="heading"><span class="section-num">03</span><h2 id="probe-title">Live Multipart Probe &amp; Runbook Audit</h2><span class="caption section-side">:8001 /v1/invoices/upload</span></div>
-      <p class="view-lead">Send a generated PDF or your own file to the local AcmePay API and inspect the real HTTP response.</p>
+      <p class="view-lead">Repeat an upload check yourself. The Discord review runs its own probes and records them with the proposed fix.</p>
       <div class="grid-two">
         <article class="card"><div class="card-head"><h3>Binary invoice verifier</h3><span class="pill mono">application/pdf</span></div><div class="card-body">
           <div class="actions"><button type="button" class="btn" id="probe-small">1.5 MiB PDF · Within both limits</button><button type="button" class="btn" id="probe-large">4.0 MiB PDF · Verify boundary</button></div>
           <form id="upload"><label class="drop" id="drop">Drop a real invoice or choose a file<input type="file" id="file" aria-describedby="file-name"><span class="caption" id="file-name">No file selected</span></label><button class="btn primary" type="submit" id="send">Send real file</button></form>
-          <div class="telemetry" role="status"><span class="pill mono" id="http-status">Awaiting probe</span><span class="caption" id="latency">— ms</span></div><p class="mono" id="hash">SHA-256 —</p>
+          <div class="telemetry" role="status"><span class="pill mono" id="http-status">Awaiting probe</span><span class="caption" id="latency">— ms</span></div><p class="caption" id="probe-sdk-policy">A sandbox probe sends the file directly to the API and reports the SDK’s size decision separately.</p><p class="mono" id="hash">SHA-256 —</p>
         </div><pre class="codebox" id="response" tabindex="0">Live response JSON will appear here.</pre></article>
         <article class="card"><div class="card-head"><h3>SRE runbook</h3><span class="pill mono" id="runbook-status">Checking</span></div><pre class="codebox runbook" id="runbook" tabindex="0">Waiting for docs/oncall-runbook.md…</pre><div class="card-head"><h3>Audit ledger · newest first</h3><span class="pill mono" id="event-count">0 events</span></div><ul class="ledger" id="ledger" tabindex="0"><li class="empty">Waiting for recorded evidence…</li></ul></article>
       </div>
@@ -518,7 +520,26 @@
     }
     $("bus-history").onchange = renderBus;
     let overviewStartId;
+    function overviewRunNote(run) {
+      if (!run) return "";
+      if (run.waiting) return run.start.event_origin === "NATIVE_SWITCH"
+        ? "Waiting for your review. Open the proposal in Discord and reply in its thread."
+        : "Waiting for your review. Open Review Local Patch to see the proposed changes.";
+      const before = run.events.find((event) => event.action === "native_before")?.evidence?.result
+        ?? run.events.find((event) => event.action === "repro")?.evidence;
+      const after = run.events.findLast((event) => event.action === "native_after")?.evidence?.result
+        ?? run.events.findLast((event) => event.action === "patch-and-verify"
+          && event.status === "VERIFIED")?.evidence?.verification;
+      const changed = after?.probes?.find((probe) => probe.verified && !probe.frontend_allows &&
+        before?.probes?.some((prior) => prior.size_bytes === probe.size_bytes && prior.frontend_allows));
+      if (changed) return "After-check passed. The SDK now rejects the " + changed.size_mb
+        + " MiB file before upload. It previously allowed it.";
+      return run.status + (run.detail ? " · " + run.detail : "");
+    }
     function renderOverview(state) {
+      const note = overviewRunNote(topologyRun());
+      $("overview-review").hidden = !note;
+      if (note) show("overview-review", note);
       const reset = auditEvents.findLast((event) => event.action === "checkout-pr-state" && event.status === "RESTORED");
       const after = Math.max(overviewStartId ?? 0, reset?.id ?? 0);
       const result = auditEvents.findLast((event) => event.id > after && event.action === "repro"
@@ -693,10 +714,12 @@
       const reason = probe.http_status === 200 ? "OK" : probe.response_json?.detail?.error_code || "RESPONSE";
       show("http-status", probe.http_status + " " + reason, probe.http_status === 200 ? "good" : "bad");
       show("latency", probe.latency_ms + " ms · " + probe.size_mb + " MiB (" + byteCount.format(probe.size_bytes) + " bytes) · " + probe.classification);
+      show("probe-sdk-policy", "SDK policy " + (probe.frontend_allows ? "allows" : "rejects") + " this "
+        + probe.size_mb + " MiB file · SDK limit " + probe.frontend_allowed_upload_mb + " MiB");
       show("hash", "SHA-256 " + probe.sha256);
       show("response", JSON.stringify(probe.response_json, null, 2));
     }
-    const buttons = ["verify","patch","reset","probe-small","probe-large","send","handoff","overview-handoff","discord-settings"];
+    const buttons = ["verify","patch","reset","probe-small","probe-large","send","handoff","discord-settings"];
     let busy = false;
     async function action(route, options, done) {
       if (busy) return;
@@ -741,10 +764,6 @@
       if (data.repro?.probes?.length) renderProbe(data.repro.probes.at(-1));
       message("Local orchestration complete · awaiting human approval.", "warn");
     });
-    $("overview-handoff").onclick = () => {
-      openView("switch-room", {focusTab:true});
-      $("handoff").click();
-    };
     let selected;
     function selectFile(file) {
       selected = file;
