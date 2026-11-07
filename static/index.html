@@ -360,6 +360,12 @@
     let auditEvents = [];
     let latestState;
     let busConnection;
+    const publicView = document.documentElement.dataset.publicView === "true";
+    if (publicView) {
+      for (const id of ["verify", "patch", "reset", "handoff", "discord-settings"]) $(id).hidden = true;
+      document.querySelector('.actions [data-open-tab="sandbox"]').textContent = "Open agent probe evidence ↗";
+      show("stream-status", "LIVE READ-ONLY · 2s poll", "good");
+    }
     const edgeIds = ["edge-request", "edge-triage-repro", "edge-triage-runbook", "edge-repro-service", "edge-runbook-service"];
     const agentNodes = {"@acmepay-triager":"node-triage", "@acmepay-repro":"node-repro", "@acmepay-runbook":"node-runbook"};
     const topologyActor = (actor) => actor?.replace(/^@preflight-/, "@acmepay-");
@@ -553,7 +559,7 @@
         : "Waiting for the triager’s findings. Start the review in Discord.");
       const ready = !!evidence.beforeReport?.probes?.length;
       $("agent-probe-results").hidden = !ready;
-      $("manual-probe").hidden = !ready || !latestState?.demo_revision?.demo_safe;
+      $("manual-probe").hidden = publicView || !ready || !latestState?.demo_revision?.demo_safe;
       show("sandbox-review-status", ready
         ? (evidence.native ? "Agent-run probes from Discord" : "Probes from local orchestration") + " · Select a result to inspect its HTTP response."
         : "Waiting for the repro agent to run the first upload checks.");
@@ -620,6 +626,7 @@
       if (!current) {
         show("gate", result ? "VERIFICATION REQUIRED" : "AWAITING VERIFICATION", "warn");
         show("overview-evidence", result ? "Run verification again to check the current contract."
+          : publicView ? "Waiting for the linked reviewer to start a verification in Discord."
           : "Start a verification run in Discord or use Run Local Orchestration.");
         return;
       }
@@ -648,7 +655,7 @@
       if (latestState) renderOverview(latestState);
     }
     function connectBus() {
-      if (busConnection) return;
+      if (publicView || busConnection) return;
       busConnection = new EventSource("/api/control-plane/events?after=" + (auditEvents.at(-1)?.id || 0));
       busConnection.onopen = () => show("stream-status", "● SSE CONNECTED", "good");
       busConnection.onerror = () => show("stream-status", "● SSE RECONNECTING", "warn");
@@ -754,7 +761,7 @@
       } finally { clearTimeout(timer); if (active === controller) active = null; }
     }
     function message(value, tone) { show("notice", value, tone); $("notice").hidden = false; }
-    const kickoff = "Run PreFlight verification for PR #402.";
+    const kickoff = "Run PreFlight verification for PR #1.";
     document.querySelectorAll("[data-copy-kickoff]").forEach((button) => {
       button.addEventListener("click", async () => {
         let copied = false;

@@ -29,7 +29,11 @@ AGENTS = {
     "runbook": ("69ee5c17-e053-492e-8584-f02a13be12d3", "@switch-agent-b2e8ed88:localhost"),
 }
 KICKOFF = "Run PreFlight verification for PR #402."
-KICKOFFS = {KICKOFF, f"@acmepay-triager {KICKOFF}"}
+KICKOFFS = {
+    f"{mention}{command.rstrip('.')}"
+    for mention in ("", "@acmepay-triager ")
+    for command in (KICKOFF, KICKOFF.replace("#402", "#1"))
+}
 DECISION = re.compile(r"(Approved|Rejected)(?: ([a-f0-9]{32}))?", re.IGNORECASE)
 MERGE_DECISION = re.compile(r"Approve and merge ([a-f0-9]{32})", re.IGNORECASE)
 TARGET = "https://github.com/varmaleena/acmepay-invoice-service.git"
@@ -305,7 +309,7 @@ def tick(room, since):
     human = approver_identity()
     kickoff = max((thread["root"] for thread in threads
                    if thread["root"].get("kind") == "message" and thread["root"].get("sender") == human
-                   and thread["root"]["timestamp"] >= since and thread["root"]["body"].strip() in KICKOFFS
+                   and thread["root"]["timestamp"] >= since and thread["root"]["body"].strip().removesuffix(".") in KICKOFFS
                    and thread["root"]["id"] not in claimed), key=lambda message: message["timestamp"], default=None)
     for proposal in approvals:
         if proposal["status"] != "PENDING" or proposal["approval_source"] != NATIVE or proposal["room_id"] != ROOM:
