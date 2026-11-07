@@ -111,10 +111,10 @@
     <p class="notice" id="notice" role="status" hidden></p>
     <div class="view" id="view-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0">
     <div class="hero">
-      <div><div class="eyebrow">AcmePay / Release Engineering</div><h1>Human-Approved Release-Verification Room</h1><p>A Switch-native, human-approved multi-agent release-verification room for API contract drift.</p><span class="pill gate" id="gate" role="status">CHECKING RELEASE</span></div>
+      <div><div class="eyebrow">AcmePay / Release Engineering</div><h1>Human-Approved Release-Verification Room</h1><p>A Switch-native, human-approved multi-agent release-verification room for API contract drift.</p><span class="pill gate" id="gate" role="status">AWAITING VERIFICATION</span><p id="overview-evidence">Start a verification run in Discord or use Run Local Orchestration.</p></div>
       <div class="repo-box"><div class="caption">CONFIGURED GITHUB PR / CHECKOUT</div><a id="repo">Waiting for checkout</a><div class="badges"><span class="pill mono" id="branch">—</span><span class="pill mono" id="commit">—</span><span class="pill mono" id="health">:8001 · checking</span></div><p id="demo-revision" role="status">Checking inspection revision.</p></div>
     </div>
-    <div class="overview-grid" aria-label="Current release findings">
+    <div class="overview-grid" id="overview-findings" aria-label="Latest verification findings" hidden>
       <article class="card metric" id="metric-payload"><div class="eyebrow">Upload contract</div><div class="metric-value" id="metric-payload-value">—</div><p id="metric-payload-note">Waiting for backend and SDK limits.</p></article>
       <article class="card metric" id="metric-retry"><div class="eyebrow">Runtime retry variable</div><div class="metric-value" id="metric-retry-value">—</div><p id="metric-retry-note">Waiting for the live environment contract.</p></article>
       <article class="card metric" id="metric-runbook"><div class="eyebrow">On-call readiness</div><div class="metric-value" id="metric-runbook-value">—</div><p id="metric-runbook-note">Waiting for the runbook from the configured local target.</p></article>
@@ -471,12 +471,46 @@
         return row;
       }));
     }
+    let overviewStartId;
+    function renderOverview(state) {
+      const reset = auditEvents.findLast((event) => event.action === "checkout-pr-state" && event.status === "RESTORED");
+      const after = Math.max(overviewStartId ?? 0, reset?.id ?? 0);
+      const result = auditEvents.findLast((event) => event.id > after && event.action === "repro"
+        && event.event_origin === "SANDBOX_PROBE");
+      const proof = result?.evidence;
+      const drift = proof?.drift;
+      const current = drift && proof.probes?.length && proof.probes.every((probe) =>
+        probe.verified && probe.target_commit_sha === state.repository.commit_sha)
+        && JSON.stringify(drift) === JSON.stringify(state.drift);
+      $("overview-findings").hidden = !current;
+      if (!current) {
+        show("gate", result ? "VERIFICATION REQUIRED" : "AWAITING VERIFICATION", "warn");
+        show("overview-evidence", result ? "Run verification again to check the current contract."
+          : "Start a verification run in Discord or use Run Local Orchestration.");
+        return;
+      }
+      const count = Number(drift.payload_drift) + Number(drift.env_drift) + Number(drift.runbook_drift);
+      const gate = state.release_gate;
+      show("gate", gate === "BLOCKED" ? "DRIFT DETECTED · " + count + " CONTRACT VIOLATION" + (count === 1 ? "" : "S")
+        : gate === "VERIFIED" ? "LOCAL CONTRACT ALIGNED" : "UNVERIFIED · CHECK TARGET", gate === "BLOCKED" ? "bad" : gate === "VERIFIED" ? "good" : "warn");
+      show("overview-evidence", "Latest verification · audit event #" + result.id);
+      show("metric-payload-value", drift.backend_max_upload_mb + " MiB / " + drift.frontend_allowed_upload_mb + " MiB");
+      show("metric-payload-note", drift.payload_drift ? "Backend / SDK · " + drift.boundary_delta_mb + " MiB contract gap" : "Backend and SDK limits agree.");
+      show("metric-retry-value", drift.runbook_audit.required_retry_env);
+      show("metric-retry-note", drift.env_drift ? "SDK expects " + drift.frontend_retry_env : "Backend and SDK use the same variable.");
+      show("metric-runbook-value", drift.runbook_drift ? "Guidance stale" : "Synchronized");
+      show("metric-runbook-note", drift.runbook_drift ? "Documented limits or retry instructions differ." : "Operational guidance matches runtime policy.");
+      $("metric-payload").dataset.alert = drift.payload_drift;
+      $("metric-retry").dataset.alert = drift.env_drift;
+      $("metric-runbook").dataset.alert = drift.runbook_drift;
+    }
     function acceptEvents(events) {
       if ((events.at(-1)?.id || 0) <= (auditEvents.at(-1)?.id || 0)) return;
       auditEvents = events;
       renderLedger(auditEvents);
       renderBus();
       renderTopology();
+      if (latestState) renderOverview(latestState);
     }
     function connectBus() {
       if (busConnection) return;
@@ -506,6 +540,7 @@
         return item;
       }));
       approvalVersion = version;
+      overviewStartId ??= state.audit_ledger.at(-1)?.id ?? 0;
       latestState = state;
       renderSwitchHealth(state.switch_console);
       const revision = state.demo_revision;
@@ -519,10 +554,7 @@
       show("verify-handoff", latestHandoff ? latestHandoff.status + " → " + latestHandoff.recipient : "No native handoff recorded");
       show("verify-approval", handoff?.latest_approval_source
         ? handoff.latest_approval_decision + " · " + originNames[handoff.latest_approval_source] : "No decision recorded");
-      const {repository: repo, contracts, drift, release_gate: gate} = state;
-      const count = Number(state.payload_drift) + Number(state.env_drift) + Number(state.runbook_drift);
-      show("gate", gate === "BLOCKED" ? "DRIFT DETECTED · " + count + " CONTRACT VIOLATION" + (count === 1 ? "" : "S")
-        : gate === "VERIFIED" ? "LOCAL CONTRACT ALIGNED" : "UNVERIFIED · CHECK TARGET", gate === "BLOCKED" ? "bad" : gate === "VERIFIED" ? "good" : "warn");
+      const {repository: repo, contracts, drift} = state;
       const remote = repo.origin.replace(/\.git$/, "");
       link("repo", remote, remote);
       show("branch", repo.branch); show("commit", repo.short_sha); $("commit").title = repo.commit_sha;
@@ -541,21 +573,13 @@
       $("runbook-limit").classList.toggle("bad", drift.runbook_audit.stale_upload_limit);
       $("runbook-retry").classList.toggle("bad", documented.length > 0 || !drift.runbook_audit.required_retry_env_documented);
       show("delta", drift.boundary_delta_mb + " MiB delta", state.payload_drift ? "bad" : "good");
-      show("metric-payload-value", contracts.backend.MAX_UPLOAD_MB + " MiB / " + contracts.frontend_sdk.allowed_upload_mb + " MiB");
-      show("metric-payload-note", state.payload_drift ? "Backend / SDK · " + drift.boundary_delta_mb + " MiB contract gap" : "Backend and SDK limits agree.");
-      show("metric-retry-value", contracts.backend.RETRY_ENV_VAR);
-      show("metric-retry-note", state.env_drift ? "SDK expects " + contracts.frontend_sdk.expected_retry_env : "Backend and SDK use the same variable.");
-      show("metric-runbook-value", state.runbook_drift ? "Guidance stale" : "Synchronized");
-      show("metric-runbook-note", state.runbook_drift ? "Documented limits or retry instructions differ." : "Operational guidance matches runtime policy.");
-      $("metric-payload").dataset.alert = state.payload_drift;
-      $("metric-retry").dataset.alert = state.env_drift;
-      $("metric-runbook").dataset.alert = state.runbook_drift;
       show("findings", state.payload_drift ? "Frontend allowance differs from backend enforcement. Confirm the affected range with a live PDF probe." : "Backend and frontend upload limits agree.");
       show("git-label", "git diff main..HEAD" + (repo.working_tree_status ? " · local edits" : ""));
       renderDiff(repo.head_diff, repo.working_tree_diff);
       show("runbook-status", state.runbook_drift ? "Stale guidance" : "Runbook synchronized", state.runbook_drift ? "warn" : "good");
       renderRunbook(contracts.runbook, drift);
       acceptEvents(state.audit_ledger);
+      renderOverview(state);
       renderTopology();
       show("discord-current", state.discord_configured ? "Discord notifications are enabled." : "Discord notifications are disabled.");
       connectBus();
@@ -633,6 +657,10 @@
       buttons.forEach((id) => { $(id).disabled = true; });
       message("Executing against the live AcmePay target…");
       try {
+        if (overviewStartId === undefined && ["run-verification", "stream-handoff"].includes(route)) {
+          await refresh(true);
+          if (overviewStartId === undefined) throw new Error("Connect to the workbench before starting verification.");
+        }
         const response = await fetch("/api/control-plane/" + route, {method:"POST", signal:AbortSignal.timeout(90000), ...options});
         const data = await response.json();
         if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "HTTP " + response.status);
