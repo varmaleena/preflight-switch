@@ -185,14 +185,21 @@ def start_run(room, kickoff):
     proposal = propose_approval(source=NATIVE, room_id=ROOM, initiating_message_id=thread_id,
                                 thread_id=thread_id, requesting_agent_id=AGENTS["runbook"][0],
                                 expected_commit=repository["commit_sha"])
+    publish_proposal(room, proposal)
+
+
+def publish_proposal(room, proposal):
+    thread_id = proposal["thread_id"]
     approval_id = proposal["approval_id"]
     diff = proposal["full_unified_diff"]
-    if "```" in diff:
-        raise SwitchError("Cannot display this diff exactly in Discord.")
     # Discord message limits apply even when Switch accepts the room operation.
+    # Preserve literal runbook fences by posting those diffs as unfenced text.
+    fenced = "```" not in diff
     for offset in range(0, len(diff), 1300):
+        part = diff[offset:offset + 1300]
+        display = f"```diff\n{part}```" if fenced else f"{part}\nEnd of diff part."
         post(room, "runbook", "native_proposal_diff", thread_id,
-             f"Proposal `{approval_id}` · diff part {offset // 1300 + 1}\n```diff\n{diff[offset:offset + 1300]}```")
+             f"Proposal `{approval_id}` · diff part {offset // 1300 + 1}\n{display}")
     proposal_message = post(
         room, "runbook", "native_proposal_review", thread_id,
         f'Proposal `{approval_id}` · SHA-256 `{proposal["diff_sha256"]}`\n'

@@ -225,8 +225,11 @@ class Room:
 
 
 @pytest.mark.parametrize("fail_after", [False, True])
-def test_native_handoff_and_publication_order(target, monkeypatch, fail_after):
+@pytest.mark.parametrize("runbook_fence", ["", "```sh\n export LEGACY_RETRY_LIMIT=5\n ```\n"])
+def test_native_handoff_and_publication_order(target, monkeypatch, fail_after, runbook_fence):
     room = Room()
+    target[1]["full_unified_diff"] += runbook_fence
+    target[1]["diff_sha256"] = sha256(target[1]["full_unified_diff"].encode()).hexdigest()
     monkeypatch.setattr(native, "inspect_state", lambda: {
         "overall_status": "DRIFT_BLOCKED",
         "repository": {"origin": native.TARGET, "branch": native.BRANCH, "short_sha": "aaaaaaa",
