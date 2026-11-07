@@ -193,10 +193,10 @@
     <div class="view" id="view-sandbox" role="tabpanel" aria-labelledby="tab-sandbox" tabindex="0" hidden>
     <section aria-labelledby="probe-title">
       <div class="heading"><span class="section-num">03</span><h2 id="probe-title">Live Multipart Probe &amp; Runbook Audit</h2><span class="caption section-side">:8001 /v1/invoices/upload</span></div>
-      <p class="view-lead">Send actual invoice bytes and inspect the receipt, response, and supporting operational evidence.</p>
+      <p class="view-lead">Send a generated PDF or your own file to the local AcmePay API and inspect the real HTTP response.</p>
       <div class="grid-two">
         <article class="card"><div class="card-head"><h3>Binary invoice verifier</h3><span class="pill mono">application/pdf</span></div><div class="card-body">
-          <div class="actions"><button type="button" class="btn" id="probe-small">1.5 MB PDF · Within both limits</button><button type="button" class="btn" id="probe-large">4.0 MB PDF · Verify boundary</button></div>
+          <div class="actions"><button type="button" class="btn" id="probe-small">1.5 MiB PDF · Within both limits</button><button type="button" class="btn" id="probe-large">4.0 MiB PDF · Verify boundary</button></div>
           <form id="upload"><label class="drop" id="drop">Drop a real invoice or choose a file<input type="file" id="file" aria-describedby="file-name"><span class="caption" id="file-name">No file selected</span></label><button class="btn primary" type="submit" id="send">Send real file</button></form>
           <div class="telemetry" role="status"><span class="pill mono" id="http-status">Awaiting probe</span><span class="caption" id="latency">— ms</span></div><p class="mono" id="hash">SHA-256 —</p>
         </div><pre class="codebox" id="response" tabindex="0">Live response JSON will appear here.</pre></article>
@@ -417,13 +417,13 @@
         && (event.proof_payload?.probes?.length || event.proof_payload?.result?.probes?.length));
       const probes = reproProof?.proof_payload.probes || reproProof?.proof_payload.result?.probes
         || current?.proof_payload?.verification?.probes || [];
-      show("topo-probes", probes.length ? probes.map((item) => item.size_mb + " MB → " + item.http_status + (item.http_status === 200 ? " OK" : " REJECTED")).join(" · ") : "Awaiting binary proof");
+      show("topo-probes", probes.length ? probes.map((item) => item.size_mb + " MiB → " + item.http_status + (item.http_status === 200 ? " OK" : " REJECTED")).join(" · ") : "Awaiting binary proof");
       const receipt = probes.at(-1)?.sha256;
       show("topo-receipt", receipt ? "SHA-256 " + receipt.slice(0, 12) + "…" : "SHA-256 —");
       $("topo-receipt").title = receipt || "";
       show("topo-stale", state.runbook_drift
         ? state.contracts.frontend_sdk.expected_retry_env + " → " + state.contracts.backend.RETRY_ENV_VAR
-          + " · " + state.contracts.frontend_sdk.allowed_upload_mb + " MB → " + state.contracts.backend.MAX_UPLOAD_MB + " MB"
+          + " · " + state.contracts.frontend_sdk.allowed_upload_mb + " MiB → " + state.contracts.backend.MAX_UPLOAD_MB + " MiB"
         : "SDK and runbook aligned");
       show("topo-pr-ref", state.repository.branch);
       show("topo-pr-sha", state.repository.short_sha);
@@ -526,9 +526,9 @@
       show("health", state.runtime_matches_checkout ? ":8001 · healthy" : ":8001 · checkout differs", state.runtime_matches_checkout ? "good" : "warn");
       const pull = repo.pull_requests.items?.find((pr) => pr.headRefName === repo.branch);
       link("pr", pull ? "GitHub PR #" + pull.number + " ↗" : repo.pull_requests.items === null ? "GitHub metadata unavailable" : "No open PR for this branch", pull?.url);
-      show("backend-limit", contracts.backend.MAX_UPLOAD_MB + " MB");
-      show("sdk-limit", contracts.frontend_sdk.allowed_upload_mb + " MB");
-      show("runbook-limit", drift.runbook_audit.documented_limits_mb.map((limit) => limit + " MB").join(", ") || "Missing");
+      show("backend-limit", contracts.backend.MAX_UPLOAD_MB + " MiB");
+      show("sdk-limit", contracts.frontend_sdk.allowed_upload_mb + " MiB");
+      show("runbook-limit", drift.runbook_audit.documented_limits_mb.map((limit) => limit + " MiB").join(", ") || "Missing");
       show("backend-retry", contracts.backend.RETRY_ENV_VAR);
       show("sdk-retry", contracts.frontend_sdk.expected_retry_env);
       const documented = drift.runbook_audit.deprecated_env_vars;
@@ -537,9 +537,9 @@
       $("sdk-retry").classList.toggle("bad", state.env_drift);
       $("runbook-limit").classList.toggle("bad", drift.runbook_audit.stale_upload_limit);
       $("runbook-retry").classList.toggle("bad", documented.length > 0 || !drift.runbook_audit.required_retry_env_documented);
-      show("delta", drift.boundary_delta_mb + " MB delta", state.payload_drift ? "bad" : "good");
-      show("metric-payload-value", contracts.backend.MAX_UPLOAD_MB + " MB / " + contracts.frontend_sdk.allowed_upload_mb + " MB");
-      show("metric-payload-note", state.payload_drift ? "Backend / SDK · " + drift.boundary_delta_mb + " MB contract gap" : "Backend and SDK limits agree.");
+      show("delta", drift.boundary_delta_mb + " MiB delta", state.payload_drift ? "bad" : "good");
+      show("metric-payload-value", contracts.backend.MAX_UPLOAD_MB + " MiB / " + contracts.frontend_sdk.allowed_upload_mb + " MiB");
+      show("metric-payload-note", state.payload_drift ? "Backend / SDK · " + drift.boundary_delta_mb + " MiB contract gap" : "Backend and SDK limits agree.");
       show("metric-retry-value", contracts.backend.RETRY_ENV_VAR);
       show("metric-retry-note", state.env_drift ? "SDK expects " + contracts.frontend_sdk.expected_retry_env : "Backend and SDK use the same variable.");
       show("metric-runbook-value", state.runbook_drift ? "Guidance stale" : "Synchronized");
@@ -614,10 +614,11 @@
         message(copied ? "Switch Room kickoff prompt copied." : kickoff, copied ? "good" : "warn");
       });
     });
+    const byteCount = new Intl.NumberFormat("en-US");
     function renderProbe(probe) {
       const reason = probe.http_status === 200 ? "OK" : probe.response_json?.detail?.error_code || "RESPONSE";
       show("http-status", probe.http_status + " " + reason, probe.http_status === 200 ? "good" : "bad");
-      show("latency", probe.latency_ms + " ms · " + probe.size_bytes.toLocaleString() + " bytes · " + probe.classification);
+      show("latency", probe.latency_ms + " ms · " + probe.size_mb + " MiB (" + byteCount.format(probe.size_bytes) + " bytes) · " + probe.classification);
       show("hash", "SHA-256 " + probe.sha256);
       show("response", JSON.stringify(probe.response_json, null, 2));
     }
@@ -669,7 +670,7 @@
     let selected;
     function selectFile(file) {
       selected = file;
-      show("file-name", file ? file.name + " · " + file.size.toLocaleString() + " bytes" : "No file selected");
+      show("file-name", file ? file.name + " · " + byteCount.format(file.size) + " bytes" : "No file selected");
     }
     $("file").onchange = () => selectFile($("file").files[0]);
     $("drop").ondragover = (event) => { event.preventDefault(); $("drop").dataset.active = ""; };
