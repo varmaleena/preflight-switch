@@ -67,6 +67,10 @@
     .view > section:first-child{margin-top:0}
     @keyframes view-enter{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
     .live-indicator[data-tone=good]::before{content:"";width:6px;height:6px;flex:none;border-radius:50%;background:currentColor;box-shadow:0 0 0 0 color-mix(in srgb,var(--good) 45%,transparent);animation:live-ring 1.9s ease-out infinite}
+    .room-tools{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:0 0 11px 32px}
+    .copy-kickoff svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linejoin:round}
+    @media(max-width:1050px){.top-switch-health{font-size:0}.top-switch-health::after{content:attr(data-short);font-size:10px}.copy-kickoff-nav .copy-label{display:none}}
+    @media(max-width:540px){.room-tools{margin-left:0}.nav-right .top-switch-health{font-size:0}.nav-right .top-switch-health::after{font-size:9px}}
     @keyframes live-ring{65%,100%{box-shadow:0 0 0 5px transparent}}
     .gate[data-tone=bad]{border-color:color-mix(in srgb,var(--bad) 30%,var(--line));box-shadow:0 0 18px color-mix(in srgb,var(--bad) 9%,transparent)}
     .overview-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:14px}
@@ -81,15 +85,20 @@
     #notice{margin:0 0 12px}
     @media(max-width:680px){.overview-grid{grid-template-columns:1fr}.metric{padding:11px 13px}.metric .metric-value{font-size:16px}}
     @media(max-width:540px){:root{--header-height:102px}.nav{height:57px;min-height:57px}.tabs{height:44px}.tab{padding-inline:9px;font-size:11px}.nav-right{gap:5px}.nav-right .btn{padding-inline:6px}.nav-right #theme{width:32px}.nav-right .pill{font-size:9px}.view-lead{margin-left:0}}
-    @media(max-width:380px){.nav{gap:5px}#discord-settings{font-size:0}#discord-settings::after{content:"Discord";font-size:11px}}
+    @media(max-width:540px){.nav{gap:5px}.nav-right .top-switch-health{font-size:0}.copy-kickoff-nav{display:none}#discord-settings{font-size:0}#discord-settings::after{content:"Discord";font-size:11px}}
     @media(max-width:1150px){.topology-grid{grid-template-columns:1fr}}
+    .origin{border-color:color-mix(in srgb,var(--origin) 55%,var(--line));box-shadow:inset 0 -2px var(--origin)}
+    [data-origin=NATIVE_SWITCH]{--origin:#a855f7}[data-origin=LOCAL_ORCHESTRATION]{--origin:#64748b}
+    [data-origin=REHEARSAL]{--origin:#f59e0b}[data-origin=GITHUB]{--origin:#3b82f6}
+    [data-origin=SANDBOX_PROBE]{--origin:#14b8a6}
+    #switch-verification{margin-top:16px}#switch-verification dd{margin:0 0 .6em;overflow-wrap:anywhere}
     @media(prefers-reduced-motion:reduce){.packet.active,.topo-node[data-gate],.view,.live-indicator[data-tone=good]::before{animation:none}body,.card,.hero,.btn,.pill,.tab,.topo-node,.codebox,.repo-box,.agent{transition:none}}
   </style>
 </head>
 <body class="antialiased">
   <header class="bar"><div class="wrap nav">
     <div class="brand"><svg width="31" height="31" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#5344d0"/><path d="m8 21 8-11h8l-8 11zm0-5h6l-4 5H8z" fill="white"/></svg><span>PreFlight</span><span>Release Workbench</span></div>
-    <div class="nav-right"><span class="pill mono live-indicator" id="connection" role="status">Connecting</span><button type="button" class="btn" id="discord-settings">Discord settings</button><button type="button" class="btn" id="theme" aria-label="Switch to dark mode">☾</button></div>
+    <div class="nav-right"><span class="pill mono live-indicator" id="connection" role="status">Connecting</span><span class="pill top-switch-health" id="switch-health-nav" role="status" data-short="Switch">Checking Switch</span><button type="button" class="btn copy-kickoff copy-kickoff-nav" data-copy-kickoff aria-label="Copy Switch Room Kickoff Prompt" title="Copy Switch Room Kickoff Prompt"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span class="copy-label">Copy kickoff</span></button><button type="button" class="btn" id="discord-settings">Discord settings</button><button type="button" class="btn" id="theme" aria-label="Switch to dark mode">☾</button></div>
   </div>
     <nav class="wrap tabs" role="tablist" aria-label="Control plane views">
       <button type="button" class="tab" id="tab-overview" role="tab" aria-selected="true" aria-controls="view-overview"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Overview</button>
@@ -102,16 +111,16 @@
     <p class="notice" id="notice" role="status" hidden></p>
     <div class="view" id="view-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0">
     <div class="hero">
-      <div><div class="eyebrow">AcmePay / Release Engineering</div><h1>Autonomous Cross-Boundary Release &amp; Runbook Gate</h1><p>Powered by Switch</p><span class="pill gate" id="gate" role="status">CHECKING RELEASE</span></div>
-      <div class="repo-box"><div class="caption">LIVE TARGET REPOSITORY</div><a id="repo">Waiting for checkout</a><div class="badges"><span class="pill mono" id="branch">—</span><span class="pill mono" id="commit">—</span><span class="pill mono" id="health">:8001 · checking</span></div></div>
+      <div><div class="eyebrow">AcmePay / Release Engineering</div><h1>Human-Approved Release-Verification Room</h1><p>A Switch-native, human-approved multi-agent release-verification room for API contract drift.</p><span class="pill gate" id="gate" role="status">CHECKING RELEASE</span></div>
+      <div class="repo-box"><div class="caption">CONFIGURED GITHUB PR / CHECKOUT</div><a id="repo">Waiting for checkout</a><div class="badges"><span class="pill mono" id="branch">—</span><span class="pill mono" id="commit">—</span><span class="pill mono" id="health">:8001 · checking</span></div><p id="demo-revision" role="status">Checking inspection revision.</p></div>
     </div>
     <div class="overview-grid" aria-label="Current release findings">
       <article class="card metric" id="metric-payload"><div class="eyebrow">Upload contract</div><div class="metric-value" id="metric-payload-value">—</div><p id="metric-payload-note">Waiting for backend and SDK limits.</p></article>
       <article class="card metric" id="metric-retry"><div class="eyebrow">Runtime retry variable</div><div class="metric-value" id="metric-retry-value">—</div><p id="metric-retry-note">Waiting for the live environment contract.</p></article>
-      <article class="card metric" id="metric-runbook"><div class="eyebrow">On-call readiness</div><div class="metric-value" id="metric-runbook-value">—</div><p id="metric-runbook-note">Waiting for the deployed runbook.</p></article>
+      <article class="card metric" id="metric-runbook"><div class="eyebrow">On-call readiness</div><div class="metric-value" id="metric-runbook-value">—</div><p id="metric-runbook-note">Waiting for the runbook from the configured local target.</p></article>
     </div>
     <div class="card quick-card"><div class="eyebrow">Open workbench</div><div class="actions">
-      <button type="button" class="btn primary" id="overview-handoff">Stream live handoff <span aria-hidden="true">↗</span></button>
+      <button type="button" class="btn primary" id="overview-handoff">Run Local Orchestration <span aria-hidden="true">↗</span></button>
       <button type="button" class="btn" data-open-tab="contracts">Review contract differences <span aria-hidden="true">↗</span></button>
       <button type="button" class="btn" data-open-tab="sandbox">Open probe sandbox <span aria-hidden="true">↗</span></button>
     </div></div>
@@ -119,11 +128,12 @@
       <div class="heading"><span class="section-num">01</span><h2 id="pipeline-title">Switch Multi-Agent Room Pipeline</h2><span class="pill mono section-side" data-tone="accent">#acmepay-preflight</span></div>
       <div class="card card-body">
         <div class="agents">
-          <div class="agent"><span class="avatar">TRI</span><div><strong>@preflight-triager</strong><span class="pill mono" data-tone="accent">anyone</span><small>Contract &amp; PR Diff Auditor</small></div></div>
-          <div class="agent"><span class="avatar">REP</span><div><strong>@preflight-repro</strong><span class="pill mono">owner-agents</span><small>Sandboxed Binary Multipart Runner</small></div></div>
-          <div class="agent"><span class="avatar">RUN</span><div><strong>@preflight-runbook</strong><span class="pill mono">owner-agents</span><small>Stale Runbook &amp; SDK Reconciler</small></div></div>
+          <div class="agent"><span class="avatar">TRI</span><div><strong>@acmepay-triager</strong><span class="pill mono" data-tone="accent">anyone</span><small>Contract &amp; PR Diff Auditor</small></div></div>
+          <div class="agent"><span class="avatar">REP</span><div><strong>@acmepay-repro</strong><span class="pill mono">owner-agents</span><small>Sandboxed Binary Multipart Runner</small></div></div>
+          <div class="agent"><span class="avatar">RUN</span><div><strong>@acmepay-runbook</strong><span class="pill mono">owner-agents</span><small>Stale Runbook &amp; SDK Reconciler</small></div></div>
         </div>
-        <div class="actions"><button type="button" class="btn" id="verify">Run Live Multi-Agent Audit &amp; Binary Repro</button><button type="button" class="btn" id="patch">Apply Verified Contract &amp; Runbook Patch</button><button type="button" class="btn" id="approve-push">Approve &amp; Push Fix to GitHub PR #402</button><button type="button" class="btn" id="reset">Reset Target PR Working Tree</button></div>
+        <div class="actions"><button type="button" class="btn" id="verify">Run Local Orchestration Audit &amp; Repro</button><button type="button" class="btn" id="patch">Review Local Patch</button><button type="button" class="btn" id="reset">Reset Target PR Working Tree</button></div>
+        <div id="approval-records" aria-label="Patch proposals"></div>
       </div>
     </section>
     </div>
@@ -131,8 +141,9 @@
     <section aria-labelledby="topology-title">
       <div class="heading"><span class="section-num">◎</span><h2 id="topology-title">Live Switch Room Topology &amp; Agent Interaction Canvas</h2><span class="pill mono section-side" id="stream-status">Connecting SSE</span></div>
       <p class="view-lead">Follow the live handoff from Git revision to binary evidence and operator review.</p>
+      <div class="room-tools"><span class="pill" id="switch-health-room" role="status">Checking Switch</span><button type="button" class="btn" data-copy-kickoff>Copy Switch Room Kickoff Prompt</button></div>
       <div class="grid-two topology-grid">
-        <article class="card"><div class="card-head"><h3>Release evidence path</h3><button class="btn primary" type="button" id="handoff">Stream Live Room Handoff</button></div>
+        <article class="card"><div class="card-head"><h3>Release evidence path</h3><button class="btn primary" type="button" id="handoff">Run Local Orchestration</button></div>
           <div class="canvas-scroll" tabindex="0" aria-label="Scrollable agent topology">
             <div class="canvas">
               <svg class="wires" viewBox="0 0 800 290" preserveAspectRatio="none" aria-hidden="true">
@@ -144,16 +155,26 @@
                 <path class="wire" d="M587 214C598 214 593 146 604 146"/><path class="packet" id="edge-runbook-service" d="M587 214C598 214 593 146 604 146"/>
               </svg>
               <a class="topo-node node-pr" id="topo-pr" tabindex="0"><span class="pill mono">GITHUB</span><strong>Security PR #402</strong><small id="topo-pr-ref">Checking branch</small><small id="topo-pr-sha">—</small></a>
-              <button type="button" class="topo-node node-triage" id="node-triage"><span class="pill mono" data-tone="accent">anyone</span><strong>@preflight-triager</strong><small>Switch Room Entrypoint</small><small class="node-status" id="topo-triage-status">IDLE</small><small>python -m agents.cli_tools triage</small></button>
-              <button type="button" class="topo-node node-repro" id="node-repro"><span class="pill mono" title="Restricted workflow. The repro agent checks that the sender is the designated triager.">🔒 owner-agents</span><strong>@preflight-repro</strong><small class="node-status" id="topo-repro-status">IDLE</small><small id="topo-probes">Awaiting binary proof</small><small id="topo-receipt">SHA-256 —</small></button>
-              <button type="button" class="topo-node node-runbook" id="node-runbook"><span class="pill mono">🔒 owner-agents</span><strong>@preflight-runbook</strong><small class="node-status" id="topo-runbook-status">IDLE</small><small id="topo-stale">Checking runbook</small></button>
+              <button type="button" class="topo-node node-triage" id="node-triage"><span class="pill mono" data-tone="accent">anyone</span><strong>@acmepay-triager</strong><small>Switch Room Entrypoint</small><small class="node-status" id="topo-triage-status">IDLE</small><small>python -m agents.cli_tools triage</small></button>
+              <button type="button" class="topo-node node-repro" id="node-repro"><span class="pill mono" title="Restricted workflow. The repro agent checks that the sender is the designated triager.">🔒 owner-agents</span><strong>@acmepay-repro</strong><small class="node-status" id="topo-repro-status">IDLE</small><small id="topo-probes">Awaiting binary proof</small><small id="topo-receipt">SHA-256 —</small></button>
+              <button type="button" class="topo-node node-runbook" id="node-runbook"><span class="pill mono">🔒 owner-agents</span><strong>@acmepay-runbook</strong><small class="node-status" id="topo-runbook-status">IDLE</small><small id="topo-stale">Checking runbook</small></button>
               <a class="topo-node node-service" id="node-service" href="http://localhost:8001/health" target="_blank" rel="noopener"><span class="pill mono">LIVE · :8001</span><strong>AcmePay service</strong><small class="node-status" id="topo-gate">CHECKING</small><small>Runtime policy &amp; Git revision</small></a>
             </div>
           </div>
           <p class="topology-detail" id="topology-detail" role="status">Select an agent to inspect its role and latest handoff.</p>
         </article>
-        <article class="card"><div class="card-head"><h3>Switch Room Live Bus</h3><span class="pill mono" data-tone="accent">#acmepay-preflight</span></div><ul class="ledger bus" id="bus" tabindex="0"><li class="empty">Waiting for room activity.</li></ul></article>
+        <article class="card"><div class="card-head"><h3>Evidence stream</h3><span class="pill mono" data-tone="accent">#acmepay-preflight</span></div><ul class="ledger bus" id="bus" tabindex="0"><li class="empty">Waiting for recorded evidence.</li></ul></article>
       </div>
+      <article class="card" id="switch-verification">
+        <div class="card-head"><h3>Switch Handoff Verification</h3></div>
+        <dl class="card-body">
+          <dt>Discord-backed Switch room</dt><dd><code id="verify-room">—</code></dd>
+          <dt>Configured member agents</dt><dd id="verify-members">—</dd>
+          <dt>Latest recorded native Switch message</dt><dd><code id="verify-message">—</code></dd>
+          <dt>Latest native agent-to-agent handoff</dt><dd id="verify-handoff">—</dd>
+          <dt>Latest approval decision and origin</dt><dd id="verify-approval">—</dd>
+        </dl>
+      </article>
     </section>
     </div>
     <div class="view" id="view-contracts" role="tabpanel" aria-labelledby="tab-contracts" tabindex="0" hidden>
@@ -185,7 +206,7 @@
     </div>
     <footer class="foot"><span>PREFLIGHT / RELEASE CONTROL</span><a href="/docs">API documentation</a></footer>
   </main>
-  <dialog id="approval"><form id="approval-form"><h2 id="approval-title">Human sign-off</h2><p id="approval-detail"></p><label>Approval reference<input name="approval_id" required maxlength="200" placeholder="Change ticket or approval ID"></label><label>Operator token<input name="token" type="password" required autocomplete="off"></label><label class="check" id="push-option"><input name="push" type="checkbox"> Commit and push the verified patch to the PR branch</label><div class="actions"><button type="button" class="btn" id="cancel">Cancel</button><button type="submit" class="btn primary">Confirm operation</button></div></form></dialog>
+  <dialog id="approval"><form id="approval-form"><h2 id="approval-title">Human sign-off</h2><p id="approval-detail"></p><pre id="review-diff" class="codebox"></pre><label>Approval ID<input name="approval_id" required maxlength="200"></label><label>Operator token<input name="token" type="password" required autocomplete="off"></label><div class="actions"><button type="button" class="btn" id="cancel">Cancel</button><button type="submit" class="btn" id="reject" value="REJECTED">Reject patch</button><button type="submit" class="btn primary" value="APPROVED">Confirm operation</button></div></form></dialog>
   <dialog id="discord-dialog"><form id="discord-form"><h2>Discord notification settings</h2><p id="discord-current">Webhook status unavailable.</p><label>Discord webhook URL<input name="webhook_url" type="password" autocomplete="off" placeholder="Leave blank to disable notifications"></label><label>Operator token<input name="token" type="password" required autocomplete="off"></label><div class="actions"><button class="btn" type="button" id="discord-cancel">Cancel</button><button class="btn primary" type="submit">Save settings</button></div></form></dialog>
   <script>
     "use strict";
@@ -287,6 +308,15 @@
       const tokens = content.split(/(\bLEGACY_RETRY_LIMIT\b|\b10[ \t]*MB\b)/g);
       view.replaceChildren(...tokens.map((part, index) => index % 2 ? node("mark", part) : document.createTextNode(part)));
     }
+    const originNames = {
+      NATIVE_SWITCH:"Native Switch", LOCAL_ORCHESTRATION:"Local orchestration",
+      REHEARSAL:"Rehearsal", GITHUB:"GitHub", SANDBOX_PROBE:"Sandbox probe",
+    };
+    function originBadge(origin) {
+      const badge = node("span", originNames[origin] || "Unclassified evidence", "pill mono origin");
+      badge.dataset.origin = origin;
+      return badge;
+    }
     function renderLedger(events) {
       const list = $("ledger");
       const latest = events.at(-1)?.id ?? 0;
@@ -303,7 +333,7 @@
         status.dataset.tone = /REGRESSION|BLOCKED|ERROR|FAILED/.test(event.status) ? "bad" : "good";
         const time = node("time", event.timestamp.slice(11, 19) + " UTC");
         time.dateTime = event.timestamp;
-        header.append(node("strong", title), status, time);
+        header.append(node("strong", title), originBadge(event.event_origin), status, time);
         row.append(header);
         if (event.source === "room_rehearsal") {
           row.append(node("span", "LOCAL ROOM REHEARSAL", "caption"));
@@ -321,7 +351,8 @@
     let latestState;
     let busConnection;
     const edgeIds = ["edge-request", "edge-triage-repro", "edge-triage-runbook", "edge-repro-service", "edge-runbook-service"];
-    const agentNodes = {"@preflight-triager":"node-triage", "@preflight-repro":"node-repro", "@preflight-runbook":"node-runbook"};
+    const agentNodes = {"@acmepay-triager":"node-triage", "@acmepay-repro":"node-repro", "@acmepay-runbook":"node-runbook"};
+    const topologyActor = (actor) => actor?.replace(/^@preflight-/, "@acmepay-");
     const labels = {
       AUDITING_DIFF:"AUDITING DIFF", ROUTED:"ROUTED TO REPRO & RUNBOOK", PROBING:"RUNNING MULTIPART PROBES",
       PROOF_RECORDED:"BINARY PROOF RECORDED", PREPARING_PATCH:"PREPARING PATCH",
@@ -330,6 +361,16 @@
     };
     function visibleMessage(event) {
       if (event.action === "handoff") return event;
+      if (event.event_origin === "NATIVE_SWITCH" && event.evidence?.message_id) return {
+        ...event, from_agent:event.agent_name || event.evidence.sender, step_status:event.status,
+        to_agent:event.evidence.recipient, summary:event.action.replaceAll("_", " "), proof_payload:event.evidence,
+      };
+      if (event.source === "switch_console") {
+        const detail = event.evidence;
+        return {...event, from_agent:event.agent_name, phase:detail.phase, step_status:event.status,
+          summary:detail.phase === "started" ? "Codex command started" : "Codex command " + detail.phase,
+          proof_payload:detail, source_label:"CLI telemetry"};
+      }
       if (event.source === "room_rehearsal") return {
         ...event, from_agent:event.agent_name, step_status:event.status,
         summary:event.evidence.message, proof_payload:event.evidence,
@@ -345,24 +386,37 @@
           proof_payload:event.evidence,
         };
       }
+      if (["GITHUB", "SANDBOX_PROBE"].includes(event.event_origin)) return {
+        ...event, from_agent:event.agent_name || originNames[event.event_origin],
+        step_status:event.status, summary:event.action.replaceAll("_", " "), proof_payload:event.evidence,
+      };
       return null;
     }
     function renderTopology() {
       if (!latestState) return;
       const state = latestState;
-      const handoffs = auditEvents.filter((event) => event.action === "handoff");
-      const current = handoffs.at(-1);
+      const handoffs = auditEvents.filter((event) => event.action === "handoff" || event.source === "switch_console"
+        || (event.event_origin === "NATIVE_SWITCH" && event.action !== "native_room_message"))
+        .map(visibleMessage).filter(Boolean);
+      const consoleRuns = new Map(handoffs.filter((event) => event.source === "switch_console").map((event) => [event.run_id, event]));
+      const pending = [...consoleRuns.values()].reverse().find((event) =>
+        event.phase === "started" && Date.now() - Date.parse(event.timestamp) < 180000);
+      const current = pending || handoffs.at(-1);
+      const currentActor = topologyActor(current?.from_agent);
       const activeRun = current?.run_id;
-      const visibleRun = handoffs.filter((event) => event.run_id === activeRun);
-      const find = (agent) => visibleRun.findLast((event) => event.from_agent === agent);
+      const visibleRun = handoffs.filter((event) => current?.source === "switch_console"
+        ? event.source === "switch_console" : event.run_id === activeRun);
+      const find = (agent) => visibleRun.findLast((event) => topologyActor(event.from_agent) === agent);
       for (const [agent, nodeId] of Object.entries(agentNodes)) {
         const last = find(agent);
-        $(nodeId).classList.toggle("active", current?.from_agent === agent ||
-          (current?.step_status === "REQUESTED" && agent === "@preflight-triager"));
+        $(nodeId).classList.toggle("active", currentActor === agent ||
+          (current?.step_status === "REQUESTED" && agent === "@acmepay-triager"));
         show(nodeId.replace("node-", "topo-") + "-status", labels[last?.step_status] || last?.step_status || "IDLE");
       }
-      const reproProof = visibleRun.findLast((event) => event.from_agent === "@preflight-repro" && event.proof_payload?.probes);
-      const probes = reproProof?.proof_payload.probes || current?.proof_payload?.verification?.probes || [];
+      const reproProof = visibleRun.findLast((event) => topologyActor(event.from_agent) === "@acmepay-repro"
+        && (event.proof_payload?.probes?.length || event.proof_payload?.result?.probes?.length));
+      const probes = reproProof?.proof_payload.probes || reproProof?.proof_payload.result?.probes
+        || current?.proof_payload?.verification?.probes || [];
       show("topo-probes", probes.length ? probes.map((item) => item.size_mb + " MB → " + item.http_status + (item.http_status === 200 ? " OK" : " REJECTED")).join(" · ") : "Awaiting binary proof");
       const receipt = probes.at(-1)?.sha256;
       show("topo-receipt", receipt ? "SHA-256 " + receipt.slice(0, 12) + "…" : "SHA-256 —");
@@ -379,9 +433,10 @@
       }
       $("node-service").dataset.gate = state.release_gate;
       show("topo-gate", state.release_gate);
-      const activeEdges = current?.from_agent === "@preflight-repro" ? ["edge-repro-service"]
-        : current?.from_agent === "@preflight-runbook" ? [current.step_status.startsWith("PATCH") || current.step_status === "APPLYING_PATCH"
+      const activeEdges = currentActor === "@acmepay-repro" ? ["edge-repro-service"]
+        : currentActor === "@acmepay-runbook" ? [current.step_status.startsWith("PATCH") || current.step_status === "APPLYING_PATCH" || current.phase === "started"
           ? "edge-runbook-service" : "edge-triage-runbook"]
+        : current?.action === "native_handoff" ? ["edge-triage-" + current.to_agent]
         : current?.step_status === "ROUTED" ? ["edge-triage-repro", "edge-triage-runbook"]
         : current ? ["edge-request"] : [];
       edgeIds.forEach((id) => $(id).classList.toggle("active", activeEdges.includes(id)));
@@ -393,19 +448,20 @@
       bus.replaceChildren(...items.map((event) => {
         const row = node("li", null, "bus-row");
         const actor = event.from_agent;
-        const initials = actor.replace(/^@?(preflight-)?/, "").slice(0, 3).toUpperCase();
+        const initials = actor.replace(/^@?(?:preflight-|acmepay-)?/, "").slice(0, 3).toUpperCase();
         row.append(node("span", initials, "avatar"));
         const content = node("div");
         const header = node("div", null, "badges");
-        header.append(node("strong", actor));
+        header.append(node("strong", actor), originBadge(event.event_origin));
         if (event.addressing_mode) header.append(node("span", event.addressing_mode, "pill mono"));
         if (event.to_agent) header.append(node("span", "→ " + event.to_agent, "caption"));
-        if (event.source === "room_rehearsal") header.append(node("span", "LOCAL REHEARSAL", "pill mono"));
+        if (event.source_label) header.append(node("span", event.source_label, "pill mono"));
         content.append(header, node("p", event.step_status + " · " + event.summary, "bus-summary"));
         if (event.command_run) content.append(node("code", event.command_run));
         if (Object.keys(event.proof_payload || {}).length) {
           const details = node("details");
-          details.append(node("summary", "View stdout / JSON evidence"), node("pre", JSON.stringify(event.proof_payload, null, 2), "codebox"));
+          const proof = event.proof_payload.stdout_proof || JSON.stringify(event.proof_payload, null, 2);
+          details.append(node("summary", "View stdout / JSON evidence"), node("pre", proof, "codebox"));
           content.append(details);
         }
         row.append(content);
@@ -431,16 +487,39 @@
     }
     for (const [agent, id] of Object.entries(agentNodes)) {
       $(id).onclick = () => {
-        const latest = auditEvents.findLast((event) => event.action === "handoff" && event.from_agent === agent);
+        const latest = auditEvents.map(visibleMessage).findLast((event) => topologyActor(event?.from_agent) === agent);
         show("topology-detail", latest ? agent + " · " + latest.summary : agent + " · Awaiting a recorded handoff.");
       };
     }
+    let approvalVersion;
     function render(state) {
+      const proposals = state.approvals || [];
+      const version = JSON.stringify(proposals.map(({approval_id, status}) => [approval_id, status]));
+      if (version !== approvalVersion) $("approval-records").replaceChildren(...proposals.slice().reverse().map((proposal) => {
+        const item = node("details");
+        const source = proposal.approval_source === "NATIVE_SWITCH" ? "Native Switch" : "Local orchestration";
+        item.append(node("summary", source + " · " + proposal.status + " · " + proposal.approval_id),
+          node("code", "SHA-256 " + proposal.diff_sha256), node("pre", proposal.full_unified_diff, "codebox"));
+        return item;
+      }));
+      approvalVersion = version;
       latestState = state;
+      renderSwitchHealth(state.switch_console);
+      const revision = state.demo_revision;
+      show("demo-revision", revision?.demo_safe ? "Seeded checkout matches hosted PR #1."
+        : revision?.problems?.join(" ") || "Inspection revision unavailable.");
+      const handoff = state.switch_handoff;
+      show("verify-room", handoff?.room_id || "—");
+      show("verify-members", handoff?.registered_member_agents.join(", ") || "—");
+      show("verify-message", handoff?.latest_native_message_id || "No native room message recorded");
+      const latestHandoff = handoff?.latest_native_handoff;
+      show("verify-handoff", latestHandoff ? latestHandoff.status + " → " + latestHandoff.recipient : "No native handoff recorded");
+      show("verify-approval", handoff?.latest_approval_source
+        ? handoff.latest_approval_decision + " · " + originNames[handoff.latest_approval_source] : "No decision recorded");
       const {repository: repo, contracts, drift, release_gate: gate} = state;
       const count = Number(state.payload_drift) + Number(state.env_drift) + Number(state.runbook_drift);
-      show("gate", gate === "BLOCKED" ? "RELEASE BLOCKED · " + count + " CONTRACT VIOLATION" + (count === 1 ? "" : "S")
-        : gate === "VERIFIED" ? "RELEASE VERIFIED · READY TO MERGE" : "RELEASE UNVERIFIED · CHECK TARGET", gate === "BLOCKED" ? "bad" : gate === "VERIFIED" ? "good" : "warn");
+      show("gate", gate === "BLOCKED" ? "DRIFT DETECTED · " + count + " CONTRACT VIOLATION" + (count === 1 ? "" : "S")
+        : gate === "VERIFIED" ? "LOCAL CONTRACT ALIGNED" : "UNVERIFIED · CHECK TARGET", gate === "BLOCKED" ? "bad" : gate === "VERIFIED" ? "good" : "warn");
       const remote = repo.origin.replace(/\.git$/, "");
       link("repo", remote, remote);
       show("branch", repo.branch); show("commit", repo.short_sha); $("commit").title = repo.commit_sha;
@@ -478,6 +557,16 @@
       show("discord-current", state.discord_configured ? "Discord notifications are enabled." : "Discord notifications are disabled.");
       connectBus();
     }
+    function renderSwitchHealth(status) {
+      const connected = status?.connected === true;
+      const version = status?.version ? " v" + status.version : "";
+      const label = "Switch Console" + version + (connected ? " · Local Switch Server Connected" : " · Local Switch Server unavailable");
+      for (const id of ["switch-health-nav", "switch-health-room"]) {
+        show(id, label, connected ? "good" : "warn");
+        $(id).title = label;
+        $(id).dataset.short = connected ? "Switch online" : "Switch offline";
+      }
+    }
     let active;
     async function refresh(force = false) {
       if (active && !force) return;
@@ -496,10 +585,35 @@
         if (active === controller) {
           show("connection", "● STATE UNAVAILABLE", "bad");
           show("health", ":8001 · unverified", "warn");
+          renderSwitchHealth(null);
         }
       } finally { clearTimeout(timer); if (active === controller) active = null; }
     }
     function message(value, tone) { show("notice", value, tone); $("notice").hidden = false; }
+    const kickoff = "Run PreFlight verification for PR #402.";
+    document.querySelectorAll("[data-copy-kickoff]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        let copied = false;
+        try {
+          await navigator.clipboard.writeText(kickoff);
+          copied = true;
+        } catch {
+          const input = document.createElement("textarea");
+          input.value = kickoff;
+          input.readOnly = true;
+          input.style.cssText = "position:fixed;left:-9999px;top:0";
+          document.body.append(input);
+          try {
+            input.select();
+            copied = document.execCommand("copy");
+          } finally {
+            input.remove();
+            button.focus({preventScroll:true});
+          }
+        }
+        message(copied ? "Switch Room kickoff prompt copied." : kickoff, copied ? "good" : "warn");
+      });
+    });
     function renderProbe(probe) {
       const reason = probe.http_status === 200 ? "OK" : probe.response_json?.detail?.error_code || "RESPONSE";
       show("http-status", probe.http_status + " " + reason, probe.http_status === 200 ? "good" : "bad");
@@ -507,7 +621,7 @@
       show("hash", "SHA-256 " + probe.sha256);
       show("response", JSON.stringify(probe.response_json, null, 2));
     }
-    const buttons = ["verify","patch","reset","probe-small","probe-large","send","handoff","overview-handoff","approve-push","discord-settings"];
+    const buttons = ["verify","patch","reset","probe-small","probe-large","send","handoff","overview-handoff","discord-settings"];
     let busy = false;
     async function action(route, options, done) {
       if (busy) return;
@@ -546,7 +660,7 @@
     });
     $("handoff").onclick = () => void action("stream-handoff", {}, (data) => {
       if (data.repro?.probes?.length) renderProbe(data.repro.probes.at(-1));
-      message("Live handoff complete · awaiting human approval.", "warn");
+      message("Local orchestration complete · awaiting human approval.", "warn");
     });
     $("overview-handoff").onclick = () => {
       openView("switch-room", {focusTab:true});
@@ -573,21 +687,29 @@
       probeAction({body});
     };
     let mutation;
-    let publishFix = false;
-    function approve(route, publish = false) {
+    let reviewing;
+    function approve(route) {
       mutation = route;
-      publishFix = publish;
       const patch = route === "remediate";
-      $("approval-form").reset();
-      $("push-option").hidden = !patch || publish;
-      show("approval-title", publish ? "Approve public GitHub push and audit comment" : patch ? "Approve contract remediation" : "Approve PR working tree reset");
-      show("approval-detail", publish ? "Apply and verify the fix, then push it to the AcmePay PR branch and post the evidence table on GitHub."
-        : patch ? "Synchronize the target SDK and runbook, then verify against the live API."
+      reviewing = patch ? (latestState?.approvals || []).findLast((entry) =>
+        entry.status === "PENDING" && entry.approval_source === "LOCAL_ORCHESTRATION") : null;
+      if (patch && !reviewing) {
+        message("Run Local Orchestration to create a proposal first.", "warn");
+        return;
+      }
+      const form = $("approval-form");
+      form.reset();
+      form.elements.approval_id.readOnly = patch;
+      form.elements.approval_id.value = reviewing?.approval_id || "";
+      $("reject").hidden = !patch;
+      $("review-diff").hidden = !patch;
+      show("review-diff", reviewing?.full_unified_diff || "");
+      show("approval-title", patch ? "Review local contract patch" : "Approve PR working tree reset");
+      show("approval-detail", patch ? "Review the exact SDK and runbook diff. Approval applies it locally."
         : "Restore the known unpatched SDK and runbook from the original security commit.");
       $("approval").showModal();
     }
     $("patch").onclick = () => approve("remediate");
-    $("approve-push").onclick = () => approve("remediate", true);
     $("reset").onclick = () => approve("checkout-unpatched");
     $("cancel").onclick = () => $("approval").close();
     $("approval").addEventListener("close", () => $("approval-form").reset());
@@ -596,15 +718,12 @@
       const data = new FormData(event.currentTarget);
       const body = {approval_id:data.get("approval_id")};
       if (mutation === "remediate") {
-        body.push = publishFix || data.get("push") === "on";
-        body.comment_pr = publishFix;
+        body.diff_sha256 = reviewing.diff_sha256;
+        body.decision = event.submitter?.value || "APPROVED";
       }
       $("approval").close();
       void action(mutation, jsonBody(body, data.get("token")), (result) => {
-        const comment = result.github_comment;
-        message(result.status + (result.push_error ? " · " + result.push_error : "") +
-          (comment ? " · GitHub comment " + comment.status.toLowerCase() : ""),
-          result.status === "PUSH_FAILED" || comment?.status === "FAILED" ? "bad" : "good");
+        message(result.status, result.status === "REJECTED" ? "warn" : "good");
         if (result.verification?.probes.length) renderProbe(result.verification.probes.at(-1));
       });
     };

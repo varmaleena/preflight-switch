@@ -122,6 +122,17 @@ def markdown_audit(result: dict) -> str:
     if any(probe.get("cross_boundary_regression") for probe in verification.get("probes", [])):
         lines.extend(["", "The SDK permits the 4 MB PDF while the live backend returns "
                       "`413 PAYLOAD_CONTRACT_VIOLATION`. The release remains blocked pending human approval."])
+    if result.get("before_verification"):
+        before = result["before_verification"]["probes"]
+        lines.extend(["", "### Before and after the approved local patch", "",
+                      "| Size | Before | After | SDK after |",
+                      "| --- | --- | --- | --- |"])
+        for old, new in zip(before, verification["probes"]):
+            lines.append(f"| {new['size_mb']:g} MiB | HTTP {old['http_status']} | HTTP {new['http_status']} | "
+                         f"{'Allows' if new['frontend_allows'] else 'Rejects'} |")
+        lines.extend(["", f"Approval `{result['approval']['approval_id']}` · "
+                      f"reviewed diff SHA-256 `{result['approval']['diff_sha256']}`. "
+                      "The verified patch is local."])
     lines.extend(["", "_Evidence collected against the running AcmePay service by PreFlight._", ""])
     return "\n".join(lines)
 
@@ -141,9 +152,12 @@ def comment_audit(result: dict) -> dict:
             raise RuntimeError(f"GitHub CLI {args[0]} {args[1]} returned exit code {response.returncode}.")
         return response.stdout.strip()
 
-    pr = json.loads(gh("pr", "view", branch, "--repo", slug, "--json", "number,url,state,headRefName"))
+    pr = json.loads(gh("pr", "view", branch, "--repo", slug, "--json", "number,url,state,headRefName,headRefOid"))
     if pr["state"] != "OPEN" or pr["headRefName"] != branch:
         raise RuntimeError("Could not confirm an open PR on the target branch.")
+    if "expected_pr_number" in result and (pr["number"] != result["expected_pr_number"]
+                                         or pr["headRefOid"] != result["expected_pr_head"]):
+        raise RuntimeError("The hosted PR or its head differs from the reviewed revision.")
     with NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".md", delete=False) as body:
         path = Path(body.name)
         body.write(markdown_audit(result))

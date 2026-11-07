@@ -16,6 +16,7 @@ from agents.cli_tools import approved_operation
 from agents.switch_protocol_worker import worker
 from app.agent_orchestrator import proposed_files, record, repro, triage
 from app.github_inspector import RUNBOOK, SDK, git, target_repo
+from app.demo_revision import require_demo_revision
 
 
 def post_room_message(message: str) -> None:
@@ -41,9 +42,10 @@ def read_state() -> dict:
         return response.json()
 
 
-def simulate_room_flow(approval_id: str | None) -> dict:
-    if not approval_id or not os.environ.get("PREFLIGHT_APPROVAL_TOKEN"):
-        raise ValueError("A local rehearsal that patches AcmePay needs an explicit approval reference and operator token.")
+def simulate_room_flow(approval_id: str | None, diff_sha256: str | None = None) -> dict:
+    if not approval_id or not diff_sha256 or not os.environ.get("PREFLIGHT_APPROVAL_TOKEN"):
+        raise ValueError("A local rehearsal needs a reviewed proposal ID, diff digest, and operator token.")
+    require_demo_revision()
     state = read_state()
     if (state["release_gate"] != "BLOCKED" or not state["runtime_matches_checkout"]
             or state["repository"]["commit_sha"] != git("rev-parse", "HEAD").strip()
@@ -83,9 +85,9 @@ def simulate_room_flow(approval_id: str | None) -> dict:
                    for path, old, new in zip(paths, before, after))
     say("@preflight-runbook", "I prepared the SDK and runbook diff. Requesting local operator approval.",
         status="AWAITING_APPROVAL", addressing="owner-agents", proposed_diff=diff)
-    say("Local operator", "Approved the local rehearsal patch. Publication remains off.",
+    result = approved_operation("remediate", approval_id, push=False, diff_sha256=diff_sha256)
+    say("Local operator", "The authenticated review approved the local rehearsal patch.",
         status="APPROVED", approval_id=approval_id, approval_source="explicit_local_operator_invocation")
-    result = approved_operation("remediate", approval_id, push=False)
     if result["release_gate"] != "VERIFIED" or read_state()["release_gate"] != "VERIFIED":
         raise ValueError("Live verification did not confirm the local patch.")
     say("@preflight-runbook",
@@ -101,10 +103,11 @@ def main() -> int:
     modes.add_argument("--simulate-room-flow", action="store_true")
     modes.add_argument("--send-message")
     parser.add_argument("--approval-id", default=os.environ.get("PREFLIGHT_APPROVAL_ID"))
+    parser.add_argument("--diff-sha256")
     args = parser.parse_args()
     try:
         if args.simulate_room_flow:
-            print(json.dumps(simulate_room_flow(args.approval_id), indent=2))
+            print(json.dumps(simulate_room_flow(args.approval_id, args.diff_sha256), indent=2))
         elif args.send_message is not None:
             post_room_message(args.send_message)
         else:

@@ -5,5 +5,6 @@ __pycache__/
 .demo/
 data/.audit_ledger.lock
 data/.target.lock
+data/.native_switch.lock
 data/audit_ledger.json
 data/.discord_webhook

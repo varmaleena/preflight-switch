@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Recorded evidence from PreFlight's local API contract verification demo.">
+<title>PreFlight · Demo evidence</title>
+<style>
+  :root { color-scheme: light dark; --bg:#f7f8fc; --panel:#fff; --ink:#17203b; --muted:#4b5974; --line:#dce2ee; --accent:#4e39bf; --good:#067451; --warn:#a63d16; }
+  @media (prefers-color-scheme:dark) { :root { --bg:#101221; --panel:#181d30; --ink:#f2f4ff; --muted:#b8c4df; --line:#333d58; --accent:#b6a7ff; --good:#5ee0b6; --warn:#ffb493; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 system-ui,sans-serif; }
+  header,main,footer { max-width:960px; margin:auto; padding:0 24px; }
+  header { display:flex; justify-content:space-between; align-items:center; gap:1rem; padding-block:26px; font-weight:750; }
+  h1 { max-width:760px; font-size:clamp(2.2rem,6vw,4.25rem); line-height:1.04; letter-spacing:-.055em; margin:0 0 1rem; }
+  h2 { margin:0 0 .6rem; font-size:1.2rem; }
+  p { color:var(--muted); }
+  a { color:var(--accent); text-underline-offset:.18em; }
+  .tag { border:1px solid var(--line); border-radius:999px; padding:.35rem .75rem; font-size:.8rem; }
+  .hero,.card { border:1px solid var(--line); background:var(--panel); border-radius:18px; padding:clamp(1.2rem,4vw,2.5rem); }
+  .actions { display:flex; flex-wrap:wrap; gap:.7rem 1.35rem; margin-top:1.35rem; }
+  .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; margin-block:1rem; }
+  .good { color:var(--good); } .warn { color:var(--warn); }
+  code { overflow-wrap:anywhere; font-size:.88em; }
+  footer { color:var(--muted); font-size:.88rem; padding-block:1.2rem 2.5rem; }
+  @media (max-width:640px) { .grid { grid-template-columns:1fr; } }
+</style>
+<header><span>PreFlight</span><span class="tag">Read-only demo evidence</span></header>
+<main>
+  <section class="hero">
+    <h1>A release-verification room for API contract drift</h1>
+    <p>PreFlight checks a pull request against the running local API, frontend SDK, and on-call runbook. The Switch workflow requires human approval for the exact SDK and runbook diff before a local patch can be applied.</p>
+    <p><strong>AcmePay PR #1</strong> tightened the backend limit to <strong>2 MiB</strong> while the SDK and runbook still allowed <strong>10 MiB</strong>.</p>
+    <nav class="actions" aria-label="Project links">
+      <a href="https://github.com/varmaleena/preflight-switch">Source repository</a>
+      <a href="https://github.com/varmaleena/preflight-switch/blob/main/DEMO.md">Run the live demo</a>
+      <a href="https://github.com/varmaleena/acmepay-invoice-service/pull/1">Review the AcmePay PR</a>
+    </nav>
+  </section>
+  <section class="grid" aria-label="Recorded multipart HTTP results">
+    <article class="card">
+      <h2>1.5 MiB PDF <span class="good">· HTTP 200</span></h2>
+      <p>The SDK allowed the upload and the local API accepted it.</p>
+      <p>1,572,864 bytes · 50.42 ms · Ledger event 104</p>
+      <p>SHA-256<br><code>a1d08ce44053fcaf76f7a13f1c359a2ae15f2ada3f6249885e811f0044127107</code></p>
+    </article>
+    <article class="card">
+      <h2>4 MiB PDF <span class="warn">· HTTP 413</span></h2>
+      <p>The SDK allowed the upload and the local API rejected it.</p>
+      <p>4,194,304 bytes · 61.87 ms · Ledger event 105</p>
+      <p>SHA-256<br><code>de69069d614c88eb63af39b6128317bbae78b252e25ed593123d0c306c56e8bc</code></p>
+    </article>
+  </section>
+  <section class="card">
+    <h2>Where the live workflow runs</h2>
+    <p>These results were captured from real requests to the local AcmePay service on November 7, 2026, at revision <code>df746a7</code>. This page is a static evidence snapshot. The Discord-backed Switch room, live probes, approval, and local remediation run on the demo workstation.</p>
+    <a href="https://github.com/varmaleena/acmepay-invoice-service/pull/1#issuecomment-6705674111">See a previously published GitHub audit comment</a>
+  </section>
+</main>
+<footer>PreFlight · Switch Rooms with Codex-backed agents</footer>
+</html>

@@ -7,10 +7,40 @@ branch=feat/security-tightening-pr402
 target=${TARGET_REPO_PATH:-../acmepay-invoice-service}
 target_url=https://github.com/varmaleena/acmepay-invoice-service.git
 case "${1:-}" in
-  "") mode=native ;;
+  ""|--demo) mode=demo ;;
+  --setup|--services|--verify|--clean) mode=${1#--} ;;
   --docker) mode=docker ;;
-  *) printf 'Usage: %s [--docker]\n' "$0" >&2; exit 2 ;;
+  *) printf 'Usage: %s [--setup|--services|--demo|--verify|--clean|--docker]\n' "$0" >&2; exit 2 ;;
 esac
+
+base_python=${PYTHON:-python3}
+venv_bin=bin/python
+if command -v cygpath >/dev/null 2>&1; then
+  base_python=${PYTHON:-python}
+  venv_bin=Scripts/python.exe
+fi
+if [[ "$mode" == clean ]]; then
+  "$base_python" - <<'PY'
+import shutil
+from pathlib import Path
+root = Path.cwd().resolve()
+for folder in map(Path, ("app", "agents", "tests")):
+    for path in folder.rglob("__pycache__"):
+        if path.is_dir() and not path.is_symlink() and path.resolve().is_relative_to(root):
+            shutil.rmtree(path)
+cache = Path(".pytest_cache")
+if cache.is_dir() and not cache.is_symlink() and cache.resolve().is_relative_to(root):
+    shutil.rmtree(cache)
+PY
+  exit
+fi
+if [[ "$mode" == verify ]]; then
+  result=0
+  "$root/.venv/$venv_bin" -m pytest -q || result=1
+  "$root/.venv/$venv_bin" -m agents.cli_tools verify-demo-state || result=1
+  "$root/.venv/$venv_bin" -m agents.cli_tools verify-switch-handoff || result=1
+  exit "$result"
+fi
 
 if [[ ! -e "$target" ]]; then
   git clone --branch "$branch" "$target_url" "$target"
@@ -53,18 +83,14 @@ if [[ "$mode" == docker ]]; then
   docker compose up -d --build
   wait_ready http://127.0.0.1:8001/health
   wait_ready http://127.0.0.1:8000/api/control-plane/state
-  docker compose exec -T preflight-control-plane python -m agents.cli_tools checkout-unpatched --approval-id demo-launcher-reset
 else
-  base_python=${PYTHON:-python3}
   if command -v cygpath >/dev/null 2>&1; then
-    base_python=${PYTHON:-python}
     export TARGET_REPO_PATH="$(cygpath -w "$target")"
   else
     export TARGET_REPO_PATH="$target"
   fi
   prepare_python() {
-    local project=$1 module=$2 executable="$1/.venv/bin/python"
-    if command -v cygpath >/dev/null 2>&1; then executable="$project/.venv/Scripts/python.exe"; fi
+    local project=$1 module=$2 executable="$1/.venv/$venv_bin"
     if [[ ! -f "$executable" ]]; then "$base_python" -m venv "$project/.venv" >&2; fi
     if ! "$executable" -c "import $module" 2>/dev/null; then
       "$executable" -m pip --version >/dev/null 2>&1 || "$executable" -m ensurepip >&2
@@ -73,6 +99,11 @@ else
     printf '%s\n' "$executable"
   }
   preflight_python=$(prepare_python "$root" 'fastapi,uvicorn,httpx,dotenv,langgraph,google.adk,yaml')
+  if [[ "$mode" == setup ]]; then
+    prepare_python "$target" 'fastapi,uvicorn,httpx,python_multipart' >/dev/null
+    printf 'Both virtual environments are ready.\n'
+    exit
+  fi
   if ! ready http://127.0.0.1:8001/health; then
     if occupied http://127.0.0.1:8001/; then printf 'Port 8001 is already in use.\n' >&2; exit 1; fi
     acmepay_python=$(prepare_python "$target" 'fastapi,uvicorn,httpx,python_multipart')
@@ -87,8 +118,9 @@ else
   fi
   wait_ready http://127.0.0.1:8000/api/control-plane/state
   "$preflight_python" -c 'from pathlib import Path; from agents.switch_protocol_bridge import read_state; from app.github_inspector import target_repo; state = read_state(); assert Path(state["repository"]["path"]).samefile(target_repo()), "Running control plane targets a different checkout"'
-  PREFLIGHT_APPROVAL_TOKEN=$("$preflight_python" -c 'from dotenv import dotenv_values; print(dotenv_values(".env").get("PREFLIGHT_APPROVAL_TOKEN", ""))') \
-    "$preflight_python" -m agents.cli_tools checkout-unpatched --approval-id demo-launcher-reset
+  if [[ "$mode" == demo ]]; then
+    "$preflight_python" -m agents.cli_tools verify-demo-state
+  fi
 fi
 
 printf '\nPreFlight workbench    http://localhost:8000/\n'
@@ -96,5 +128,4 @@ printf 'Live state API         http://localhost:8000/api/control-plane/state\n'
 printf 'AcmePay health         http://localhost:8001/health\n'
 printf 'AcmePay manifest       http://localhost:8001/contract-manifest\n'
 printf 'Switch template        %s/preflight.template.yaml\n' "$root"
-printf '\nIn Switch Console, open Templates → Import template, load the YAML above, select Codex and your Slack or Discord bridge,\n'
-printf 'and set the working directory to this checkout. Use the template and send the triager the AcmePay PR URL.\n'
+printf '\nFor the pinned Discord room, see DEMO.md. Starting local services does not send a room message.\n'

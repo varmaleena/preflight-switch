@@ -8,14 +8,17 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from difflib import unified_diff
 from functools import wraps
+from hashlib import sha256
 from inspect import signature
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import TypedDict
 from uuid import uuid4
 
-from agents.notifications import discord_notify, publish_audit
+from agents.notifications import discord_notify
 from app.contract_verifier import execute_live_probe, live_contracts, target_client
+from app.demo_revision import require_demo_revision
+from app.evidence import LOCAL, NATIVE, event_origin
 from app.github_inspector import (
     BASE, CONFIG, LIMIT, PR_BRANCH, ROOT, RUNBOOK, SDK, InspectionError,
     contract_drift, git, inspect_repository, parse_policy, read_contracts, target_repo,
@@ -91,7 +94,7 @@ def load_entries(path: Path) -> list[dict]:
         return []
     if not isinstance(entries, list) or any(not isinstance(entry, dict) for entry in entries):
         raise ValueError("Audit ledger must contain an array of events.")
-    return entries
+    return [{**event, "event_origin": event_origin(event)} for event in entries]
 
 
 def ledger(after: int = 0) -> list[dict]:
@@ -100,7 +103,7 @@ def ledger(after: int = 0) -> list[dict]:
         return [event for event in load_entries(path) if event["id"] > after]
 
 
-def record(action: str, status: str, evidence: dict, *, source: str = "control_plane",
+def record(action: str, status: str, evidence: dict, *, source: str = "LOCAL_ORCHESTRATION",
            command: str | None = None, run_id: str | None = None, external_id: str | None = None,
            actor: str | None = None, addressing_mode: str | None = None) -> dict:
     path = ledger_path()
@@ -120,6 +123,7 @@ def record(action: str, status: str, evidence: dict, *, source: str = "control_p
         }
         if action == "handoff":
             event.update(evidence)
+        event["event_origin"] = event_origin(event)
         entries.append(event)
         atomic_write(path, (json.dumps(entries, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
         return event
@@ -165,10 +169,6 @@ def broadcast_step(step: str):
                 status = "UNVERIFIED"
             handoff(actor, recipient, addressing, status, result.get("summary", description + " completed."),
                     run_id, command, result)
-            wants_comment = bound.arguments.get("comment_pr") or os.environ.get("GITHUB_COMMENT_LIVE") == "1"
-            if wants_comment and step != "prepare" and status not in {"UNVERIFIED", "PUSH_FAILED"}:
-                result["github_comment"] = publish_audit(result)
-                record("github_comment", result["github_comment"]["status"], result["github_comment"], run_id=run_id)
             return result
 
         return execute
@@ -199,7 +199,7 @@ def inspect_state() -> dict:
 
 
 @broadcast_step("triage")
-def triage(run_id: str | None = None, *, comment_pr: bool = False) -> dict:
+def triage(run_id: str | None = None) -> dict:
     state = inspect_state()
     repo = state["repository"]
     result = {
@@ -215,7 +215,11 @@ def triage(run_id: str | None = None, *, comment_pr: bool = False) -> dict:
 
 
 @broadcast_step("repro")
-def repro(run_id: str | None = None, *, comment_pr: bool = False) -> dict:
+def repro(run_id: str | None = None) -> dict:
+    return collect_repro(run_id)
+
+
+def collect_repro(run_id: str | None = None) -> dict:
     probes = [execute_live_probe(1.5, "preflight-baseline.pdf", run_id=run_id),
               execute_live_probe(4, "preflight-boundary.pdf", run_id=run_id)]
     status = "UNVERIFIED" if not all(probe["verified"] for probe in probes) else (
@@ -378,54 +382,134 @@ def replace_contracts(paths: tuple[Path, Path], contents: tuple[str, str]) -> No
         raise
 
 
+def approval_records(entries: list[dict] | None = None) -> list[dict]:
+    records = {}
+    for event in entries if entries is not None else ledger():
+        if event["action"] in {"approval_proposal", "approval_delivery", "approval_decision"}:
+            evidence = event["evidence"]
+            records[evidence["approval_id"]] = evidence
+    return list(records.values())
+
+
+def patch_snapshot() -> dict:
+    branch = approved_branch()
+    commit = git("rev-parse", "HEAD").strip()
+    if git("status", "--porcelain", "--untracked-files=all").strip():
+        raise MutationConflict("The target must be clean before proposing or approving a patch.")
+    _, paths, before, after = repo_edit_context()
+    if tuple(path.read_text(encoding="utf-8") for path in paths) != before:
+        raise MutationConflict("The target contract is already patched.")
+    patch = "".join("".join(unified_diff(old.splitlines(keepends=True), new.splitlines(keepends=True),
+                                         fromfile=f"a/{path}", tofile=f"b/{path}"))
+                    for path, old, new in zip((SDK, RUNBOOK), before, after))
+    if not patch:
+        raise MutationConflict("There is no contract patch to approve.")
+    return {
+        "target_repository": git("remote", "get-url", "origin").strip(),
+        "target_branch": branch, "base_commit_sha": commit,
+        "proposed_file_paths": [SDK, RUNBOOK], "full_unified_diff": patch,
+        "diff_sha256": sha256(patch.encode("utf-8")).hexdigest(),
+    }
+
+
+def propose_approval(*, source: str = LOCAL, room_id: str | None = None,
+                     initiating_message_id: str | None = None, thread_id: str | None = None,
+                     requesting_agent_id: str | None = None, expected_commit: str | None = None) -> dict:
+    if source not in {LOCAL, NATIVE}:
+        raise MutationConflict("Unknown approval source.")
+    if source == NATIVE and not all((room_id, initiating_message_id, thread_id, requesting_agent_id)):
+        raise MutationConflict("Native proposals require a verified room, thread, message, and agent.")
+    with file_lock(ledger_path().with_name(".target.lock")):
+        records = approval_records()
+        if source == NATIVE and any(item["approval_source"] == NATIVE
+                                    and item["initiating_message_id"] == initiating_message_id for item in records):
+            raise MutationConflict("This Switch kickoff already has a proposal.")
+        snapshot = patch_snapshot()
+        if expected_commit and snapshot["base_commit_sha"] != expected_commit:
+            raise MutationConflict("The target changed after triage. Start a new review.")
+        proposal = {
+            **snapshot, "approval_id": uuid4().hex, "room_id": room_id,
+            "initiating_message_id": initiating_message_id, "thread_id": thread_id,
+            "proposal_message_id": None, "requesting_agent_id": requesting_agent_id,
+            "created_at": datetime.now(timezone.utc).isoformat(), "status": "PENDING",
+            "approval_source": source,
+        }
+        record("approval_proposal", "PENDING", proposal, source=source)
+        return proposal
+
+
+def pending_approval(approval_id: str) -> dict:
+    proposal = next((item for item in approval_records() if item["approval_id"] == approval_id), None)
+    if proposal is None or proposal["status"] != "PENDING":
+        raise MutationConflict("A pending approval proposal is required.")
+    return proposal
+
+
+def bind_proposal_message(approval_id: str, message_id: str) -> None:
+    with file_lock(ledger_path().with_name(".target.lock")):
+        proposal = pending_approval(approval_id)
+        if proposal["approval_source"] != NATIVE or proposal["proposal_message_id"] or not message_id:
+            raise MutationConflict("Cannot bind the Switch proposal message.")
+        record("approval_delivery", "PENDING", {**proposal, "proposal_message_id": message_id}, source=NATIVE)
+
+
 @broadcast_step("prepare")
 def prepare_handoff(run_id: str | None = None) -> dict:
     contracts = read_contracts()
-    repo = target_repo()
-    paths = (SDK, RUNBOOK)
-    before = tuple((repo / path).read_text(encoding="utf-8") for path in paths)
-    after = proposed_files(*before, contracts["backend"])
-    patch = "".join("".join(unified_diff(old.splitlines(keepends=True), new.splitlines(keepends=True),
-                                        fromfile=f"a/{path}", tofile=f"b/{path}"))
-                    for path, old, new in zip(paths, before, after))
+    proposal = propose_approval(requesting_agent_id="@preflight-runbook")
     drift = contract_drift(contracts)
     return {"status": "AWAITING_HUMAN_APPROVAL", "summary": "SDK and runbook diff ready for human review.",
-            "proposed_diff": patch, "drift": drift, "runbook_status": "STALE" if drift["runbook_drift"] else "ALIGNED"}
+            "proposed_diff": proposal["full_unified_diff"], "approval": proposal,
+            "drift": drift, "runbook_status": "STALE" if drift["runbook_drift"] else "ALIGNED"}
 
 
-@broadcast_step("patch-and-verify")
-def patch_and_verify(approval_id: str, push: bool = False, comment_pr: bool = False,
-                     *, run_id: str | None = None) -> dict:
+def review_patch(approval_id: str, diff_sha256: str, decision: str, *,
+                 approver_identity: str, source: str = LOCAL, room_id: str | None = None,
+                 approval_message_id: str | None = None, timestamp: str | None = None) -> dict:
     with file_lock(ledger_path().with_name(".target.lock")):
-        branch = approved_branch()
+        proposal = pending_approval(approval_id)
+        if (not approver_identity or proposal["approval_source"] != source or proposal["room_id"] != room_id
+                or proposal["diff_sha256"] != diff_sha256 or decision not in {"APPROVED", "REJECTED"}):
+            raise MutationConflict("Approval identity, scope, decision, or reviewed digest does not match.")
+        if source == NATIVE and (not approval_message_id or not proposal["proposal_message_id"] or not timestamp
+                                 or any(item.get("approval_message_id") == approval_message_id
+                                        for item in approval_records())):
+            raise MutationConflict("A new, verified Switch reply to the displayed proposal is required.")
+        try:
+            if decision == "APPROVED":
+                require_demo_revision()
+            snapshot = patch_snapshot()
+            if any(proposal[key] != value for key, value in snapshot.items()):
+                raise MutationConflict("The target revision or proposed patch changed.")
+        except (MutationConflict, InspectionError):
+            record("approval_decision", "INVALIDATED", {**proposal, "status": "INVALIDATED"}, source=source)
+            raise
+        reviewed = {**proposal, "status": decision, "decision": decision,
+                    "approver_identity": approver_identity, "reviewed_diff_digest": diff_sha256,
+                    "approval_message_id": approval_message_id,
+                    "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
+                    "current_commit_sha": snapshot["base_commit_sha"]}
+        record("approval_decision", decision, reviewed, source=source)
+        if decision == "REJECTED":
+            return reviewed
         _, paths, _, patched = repo_edit_context()
         before = tuple(path.read_text(encoding="utf-8") for path in paths)
-        if before != patched:
-            replace_contracts(paths, patched)
+        replace_contracts(paths, patched)
         try:
             state = inspect_state()
-            verification = repro(run_id)
-            if state["overall_status"] != "RELEASE_READY" or verification["status"] != "VERIFIED":
+            if state["overall_status"] != "RELEASE_READY":
                 raise MutationConflict("Live verification did not confirm the remediation.")
-            if not any(probe["http_status"] == 200 for probe in verification["probes"]):
-                raise MutationConflict("Live verification did not accept an in-policy invoice.")
+            verification = collect_repro() if source == LOCAL else None
+            if verification and (verification["status"] != "VERIFIED" or
+                                 not any(probe["http_status"] == 200 for probe in verification["probes"])):
+                raise MutationConflict("Live verification did not confirm invoice behavior.")
         except Exception:
-            if before != patched:
-                replace_contracts(paths, before)
+            replace_contracts(paths, before)
             raise
-        result = {"status": "VERIFIED", "release_gate": state["release_gate"], "approval_id": approval_id, "pushed": False,
-                  "drift": state["drift"], "verification": verification, "commit_sha": None}
-        if push:
-            try:
-                if git("diff", "HEAD", "--", SDK, RUNBOOK):
-                    git("commit", "--only", "-m", "fix: align SDK and runbook with invoice upload policy", "--", SDK, RUNBOOK)
-                result["commit_sha"] = git("rev-parse", "HEAD").strip()
-                git("push", "origin", f"HEAD:refs/heads/{branch}", timeout=40)
-                result["pushed"] = True
-            except InspectionError as exc:
-                result.update(status="PUSH_FAILED", push_error=str(exc))
-        record("patch-and-verify", result["status"], result, run_id=run_id,
-               command="python -m agents.cli_tools remediate" + (" --push" if push else ""))
+        result = {"status": "VERIFIED" if verification else "APPLIED", "release_gate": state["release_gate"],
+                  "approval_id": approval_id, "pushed": False, "drift": state["drift"],
+                  "verification": verification, "commit_sha": snapshot["base_commit_sha"]}
+        record("patch-and-verify", result["status"], result, source=source)
         return result
 
 
@@ -444,6 +528,11 @@ def checkout_pr_state(approval_id: str) -> dict:
             # The original blobs already match HEAD. Refresh the index stat metadata too.
             restore.append("--staged")
         git("restore", "--source", original, *restore, "--", SDK, RUNBOOK)
+        for proposal in approval_records():
+            if proposal["status"] == "PENDING":
+                record("approval_decision", "INVALIDATED",
+                       {**proposal, "status": "INVALIDATED", "reason": "Target reset"},
+                       source=proposal["approval_source"])
         result = {
             "status": "RESTORED", "approval_id": approval_id, "unpatched_source_sha": original,
             "branch_head_sha": git("rev-parse", "HEAD").strip(),

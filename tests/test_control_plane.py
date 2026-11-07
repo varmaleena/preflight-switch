@@ -7,11 +7,15 @@ from fastapi.testclient import TestClient
 
 from app.contract_verifier import MIB, pdf_payload
 from app.main import app
+from agents.switch_console import CONSOLE_SOURCE
 from app.github_inspector import ROOT
+from app.demo_revision import DEMO_HEAD
 
 
 @pytest.fixture
 def client(monkeypatch):
+    monkeypatch.setattr("app.agent_orchestrator.discord_notify", lambda event: None)
+    monkeypatch.setattr("app.demo_revision.hosted_head", lambda **_: (DEMO_HEAD, None))
     with TemporaryDirectory(dir=ROOT / "data") as directory:
         monkeypatch.setenv("PREFLIGHT_LEDGER_PATH", str(Path(directory) / "ledger.json"))
         with TestClient(app) as test_client:
@@ -23,6 +27,7 @@ def test_state_uses_real_checkout_and_running_service(client):
     assert response.status_code == 200, response.text
     state = response.json()
     assert state["runtime_matches_checkout"]
+    assert state["demo_revision"]["demo_safe"]
     assert state["runtime"]["manifest"] == state["contracts"]
     assert state["runtime"]["health"]["git_commit_sha"] == state["repository"]["commit_sha"]
     assert "diff --git a/backend/config.py b/backend/config.py" in state["repository"]["unified_diff"]
@@ -42,6 +47,7 @@ def test_probe_observes_real_boundary_regression_and_writes_ledger(client):
     assert probe["classification"] == "CROSS_BOUNDARY_REGRESSION"
     event = client.get("/api/control-plane/state").json()["audit_ledger"][-1]
     assert event["id"] == probe["ledger_event_id"]
+    assert event["event_origin"] == "SANDBOX_PROBE"
     assert event["evidence"]["sha256"] == probe["sha256"]
 
 
@@ -58,7 +64,7 @@ def test_multipart_probe_verifies_the_real_backend_receipt(client):
 
 def test_remediation_requires_human_credential(client, monkeypatch):
     monkeypatch.setenv("PREFLIGHT_APPROVAL_TOKEN", "local-integration-test-approval")
-    response = client.post("/api/control-plane/remediate", json={"approval_id": "untrusted"})
+    response = client.post("/api/control-plane/remediate", json={"approval_id": "untrusted", "diff_sha256": "a" * 64})
     assert response.status_code == 401
 
 
@@ -77,3 +83,42 @@ def test_handoff_records_real_probes_and_stops_before_remediation(client):
         "PREPARING_PATCH", "AWAITING_HUMAN_APPROVAL",
     ]
     assert state["release_gate"] == "BLOCKED"
+    proposal = result["prepare"]["approval"]
+    assert proposal["status"] == "PENDING" and proposal["approval_source"] == "LOCAL_ORCHESTRATION"
+    assert proposal["diff_sha256"] == hashlib.sha256(result["prepare"]["proposed_diff"].encode()).hexdigest()
+    assert all(event["source"] == "LOCAL_ORCHESTRATION" for event in handoffs)
+
+
+def test_authenticated_local_review_requires_proposal_and_records_rejection(client, monkeypatch):
+    monkeypatch.setenv("PREFLIGHT_APPROVAL_TOKEN", "local-integration-test-approval")
+    headers = {"Authorization": "Bearer local-integration-test-approval"}
+    route = "/api/control-plane/remediate"
+    assert client.post(route, headers=headers, json={"approval_id": "missing", "diff_sha256": "a" * 64}).status_code == 409
+    from app.agent_orchestrator import propose_approval
+    proposal = propose_approval()
+    body = {"approval_id": proposal["approval_id"], "diff_sha256": proposal["diff_sha256"], "decision": "REJECTED"}
+    response = client.post(route, headers=headers, json=body)
+    assert response.status_code == 200, response.text
+    assert response.json()["decision"] == "REJECTED"
+    assert client.post(route, headers=headers, json=body).status_code == 409
+
+
+def test_switch_console_webhook_is_authenticated_and_deduplicated(client, monkeypatch):
+    monkeypatch.setenv("PREFLIGHT_SWITCH_WEBHOOK_TOKEN", "isolated-test-relay-token")
+    run_id = "a" * 32
+    event = {
+        "event_id": f"{run_id}:started", "run_id": run_id, "agent_id": "@acmepay-repro",
+        "addressing": "owner-agents", "room": "#acmepay-preflight", "source": CONSOLE_SOURCE,
+        "command": "python -m agents.cli_tools repro", "phase": "started", "status": "RUNNING",
+        "stdout_proof": "",
+    }
+    route = "/api/switch/webhook"
+    assert client.post(route, json=event).status_code == 401
+    headers = {"Authorization": "Bearer isolated-test-relay-token"}
+    response = client.post(route, json=event, headers=headers)
+    assert response.status_code == 202, response.text
+    assert client.post(route, json=event, headers=headers).json() == response.json()
+    assert client.post(route, json={**event, "addressing": "anyone"}, headers=headers).status_code == 422
+    events = client.get("/api/control-plane/state").json()["audit_ledger"]
+    assert len(events) == 1
+    assert events[0]["source"] == "switch_console" and events[0]["agent_name"] == "@acmepay-repro"
