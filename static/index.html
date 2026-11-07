@@ -140,10 +140,11 @@
     <div class="view" id="view-switch-room" role="tabpanel" aria-labelledby="tab-switch-room" tabindex="0" hidden>
     <section aria-labelledby="topology-title">
       <div class="heading"><span class="section-num">◎</span><h2 id="topology-title">Live Switch Room Topology &amp; Agent Interaction Canvas</h2><span class="pill mono section-side" id="stream-status">Connecting SSE</span></div>
-      <p class="view-lead">Follow the live handoff from Git revision to binary evidence and operator review.</p>
+      <p class="view-lead">A Discord kickoff starts a run. Follow its handoffs, probe results, and approval here.</p>
       <div class="room-tools"><span class="pill" id="switch-health-room" role="status">Checking Switch</span><button type="button" class="btn" data-copy-kickoff>Copy Switch Room Kickoff Prompt</button></div>
       <div class="grid-two topology-grid">
         <article class="card"><div class="card-head"><h3>Release evidence path</h3><button class="btn primary" type="button" id="handoff">Run Local Orchestration</button></div>
+          <p class="topology-detail" role="status"><strong id="topo-run-status">Awaiting kickoff</strong> <span id="topo-run-detail">· Send the kickoff in Discord to start a new run.</span></p>
           <div class="canvas-scroll" tabindex="0" aria-label="Scrollable agent topology">
             <div class="canvas">
               <svg class="wires" viewBox="0 0 800 290" preserveAspectRatio="none" aria-hidden="true">
@@ -155,7 +156,7 @@
                 <path class="wire" d="M587 214C598 214 593 146 604 146"/><path class="packet" id="edge-runbook-service" d="M587 214C598 214 593 146 604 146"/>
               </svg>
               <a class="topo-node node-pr" id="topo-pr" tabindex="0"><span class="pill mono">GITHUB</span><strong>Security PR #402</strong><small id="topo-pr-ref">Checking branch</small><small id="topo-pr-sha">—</small></a>
-              <button type="button" class="topo-node node-triage" id="node-triage"><span class="pill mono" data-tone="accent">anyone</span><strong>@acmepay-triager</strong><small>Switch Room Entrypoint</small><small class="node-status" id="topo-triage-status">IDLE</small><small>python -m agents.cli_tools triage</small></button>
+              <button type="button" class="topo-node node-triage" id="node-triage"><span class="pill mono" data-tone="accent">anyone</span><strong>@acmepay-triager</strong><small>Checks PR and contract drift</small><small class="node-status" id="topo-triage-status">IDLE</small></button>
               <button type="button" class="topo-node node-repro" id="node-repro"><span class="pill mono" title="Restricted workflow. The repro agent checks that the sender is the designated triager.">🔒 owner-agents</span><strong>@acmepay-repro</strong><small class="node-status" id="topo-repro-status">IDLE</small><small id="topo-probes">Awaiting binary proof</small><small id="topo-receipt">SHA-256 —</small></button>
               <button type="button" class="topo-node node-runbook" id="node-runbook"><span class="pill mono">🔒 owner-agents</span><strong>@acmepay-runbook</strong><small class="node-status" id="topo-runbook-status">IDLE</small><small id="topo-stale">Checking runbook</small></button>
               <a class="topo-node node-service" id="node-service" href="http://localhost:8001/health" target="_blank" rel="noopener"><span class="pill mono">LIVE · :8001</span><strong>AcmePay service</strong><small class="node-status" id="topo-gate">CHECKING</small><small>Runtime policy &amp; Git revision</small></a>
@@ -163,7 +164,7 @@
           </div>
           <p class="topology-detail" id="topology-detail" role="status">Select an agent to inspect its role and latest handoff.</p>
         </article>
-        <article class="card"><div class="card-head"><h3>Evidence stream</h3><span class="pill mono" data-tone="accent">#acmepay-preflight</span></div><ul class="ledger bus" id="bus" tabindex="0"><li class="empty">Waiting for recorded evidence.</li></ul></article>
+        <article class="card"><div class="card-head"><h3 id="bus-title">Current run evidence</h3><label class="caption"><input type="checkbox" id="bus-history"> Show saved history</label></div><ul class="ledger bus" id="bus" tabindex="0"><li class="empty">Waiting for a verification run.</li></ul></article>
       </div>
       <article class="card" id="switch-verification">
         <div class="card-head"><h3>Switch Handoff Verification</h3></div>
@@ -364,6 +365,14 @@
     };
     function visibleMessage(event) {
       if (event.action === "handoff") return event;
+      if (event.action === "approval_decision") return {
+        ...event, from_agent:"Human review", step_status:event.status,
+        summary:"Proposal " + event.evidence.approval_id, proof_payload:event.evidence,
+      };
+      if (event.action === "native_workflow_error") return {
+        ...event, from_agent:"Verification", step_status:event.status,
+        summary:event.evidence.error, proof_payload:event.evidence,
+      };
       if (event.event_origin === "NATIVE_SWITCH" && event.evidence?.message_id) return {
         ...event, from_agent:event.agent_name || event.evidence.sender, step_status:event.status,
         to_agent:event.evidence.recipient, summary:event.action.replaceAll("_", " "), proof_payload:event.evidence,
@@ -395,26 +404,54 @@
       };
       return null;
     }
+    function topologyRun() {
+      const start = auditEvents.findLast((event) => event.action === "native_kickoff" ||
+        (event.action === "handoff" && ["REQUESTED", "AUDITING_DIFF"].includes(event.status)));
+      if (!start) return null;
+      const runId = start.run_id;
+      const related = (event) => event.run_id === runId || event.evidence?.thread_id === runId;
+      const proposal = auditEvents.findLast((event) => related(event) && event.action === "approval_delivery")
+        ?.evidence ?? auditEvents.findLast((event) => related(event) && event.status === "AWAITING_HUMAN_APPROVAL")
+        ?.proof_payload?.approval;
+      const sameProposal = (event) => proposal && event.evidence?.approval_id === proposal.approval_id;
+      const events = auditEvents.filter((event) => related(event) || sameProposal(event));
+      const decision = events.findLast((event) => event.action === "approval_decision");
+      const waiting = !!proposal && !decision;
+      if (!waiting && start.id <= (overviewStartId ?? start.id)
+          && Date.now() - Date.parse(start.timestamp) > 120000) return null;
+      const last = events.findLast((event) => event.action !== "native_room_message" && event.action !== "probe");
+      const verified = events.some((event) => event.action === "native_after" ||
+        (event.action === "patch-and-verify" && event.status === "VERIFIED"));
+      let status = "Verification running";
+      if (last?.status === "FAILED" || decision?.status === "INVALIDATED") status = "Verification needs attention";
+      else if (decision?.status === "REJECTED") status = "Proposal rejected";
+      else if (verified) status = "After-check recorded";
+      else if (decision?.status === "APPROVED") status = "Approved · rechecking";
+      else if (waiting) status = "Waiting for human approval";
+      else if (last?.action === "repro" && start.event_origin !== "NATIVE_SWITCH") status = "Probe evidence recorded";
+      return {start, events, status, waiting, active: ["Verification running", "Approved · rechecking"].includes(status),
+        proposal, detail: last?.status === "FAILED" ? last.evidence?.error : null};
+    }
     function renderTopology() {
       if (!latestState) return;
       const state = latestState;
-      const handoffs = auditEvents.filter((event) => event.action === "handoff" || event.source === "switch_console"
-        || (event.event_origin === "NATIVE_SWITCH" && event.action !== "native_room_message"))
+      const run = topologyRun();
+      const visibleRun = (run?.events ?? []).filter((event) => event.action === "handoff" ||
+        (event.event_origin === "NATIVE_SWITCH" && event.action !== "native_room_message"))
         .map(visibleMessage).filter(Boolean);
-      const consoleRuns = new Map(handoffs.filter((event) => event.source === "switch_console").map((event) => [event.run_id, event]));
-      const pending = [...consoleRuns.values()].reverse().find((event) =>
-        event.phase === "started" && Date.now() - Date.parse(event.timestamp) < 180000);
-      const current = pending || handoffs.at(-1);
-      const currentActor = topologyActor(current?.from_agent);
-      const activeRun = current?.run_id;
-      const visibleRun = handoffs.filter((event) => current?.source === "switch_console"
-        ? event.source === "switch_console" : event.run_id === activeRun);
+      const current = visibleRun.at(-1);
+      const currentActor = run?.active ? topologyActor(current?.from_agent) : null;
+      show("topo-run-status", run?.status ?? "Awaiting kickoff");
+      show("topo-run-detail", run ? "· " + (originNames[run.start.event_origin] ?? "Verification")
+        + " · kickoff #" + run.start.id + (run.waiting ? " · proposal " + run.proposal.approval_id : "")
+        + (run.detail ? " · " + run.detail : "") : "· Send the kickoff in Discord to start a new run.");
       const find = (agent) => visibleRun.findLast((event) => topologyActor(event.from_agent) === agent);
       for (const [agent, nodeId] of Object.entries(agentNodes)) {
         const last = find(agent);
         $(nodeId).classList.toggle("active", currentActor === agent ||
-          (current?.step_status === "REQUESTED" && agent === "@acmepay-triager"));
-        show(nodeId.replace("node-", "topo-") + "-status", labels[last?.step_status] || last?.step_status || "IDLE");
+          (run?.active && ["REQUESTED", "RECEIVED"].includes(current?.step_status) && agent === "@acmepay-triager"));
+        show(nodeId.replace("node-", "topo-") + "-status", run?.waiting && agent === "@acmepay-runbook"
+          ? "WAITING FOR APPROVAL" : labels[last?.step_status] || last?.step_status || "IDLE");
       }
       const reproProof = visibleRun.findLast((event) => topologyActor(event.from_agent) === "@acmepay-repro"
         && (event.proof_payload?.probes?.length || event.proof_payload?.result?.probes?.length));
@@ -424,10 +461,7 @@
       const receipt = probes.at(-1)?.sha256;
       show("topo-receipt", receipt ? "SHA-256 " + receipt.slice(0, 12) + "…" : "SHA-256 —");
       $("topo-receipt").title = receipt || "";
-      show("topo-stale", state.runbook_drift
-        ? state.contracts.frontend_sdk.expected_retry_env + " → " + state.contracts.backend.RETRY_ENV_VAR
-          + " · " + state.contracts.frontend_sdk.allowed_upload_mb + " MiB → " + state.contracts.backend.MAX_UPLOAD_MB + " MiB"
-        : "SDK and runbook aligned");
+      show("topo-stale", run?.proposal ? "Two-file proposal recorded" : "Waiting for runbook evidence");
       show("topo-pr-ref", state.repository.branch);
       show("topo-pr-sha", state.repository.short_sha);
       const pr = state.repository.pull_requests.items?.find((item) => item.headRefName === state.repository.branch);
@@ -436,7 +470,7 @@
       }
       $("node-service").dataset.gate = state.release_gate;
       show("topo-gate", state.release_gate);
-      const activeEdges = currentActor === "@acmepay-repro" ? ["edge-repro-service"]
+      const activeEdges = !run?.active ? [] : currentActor === "@acmepay-repro" ? ["edge-repro-service"]
         : currentActor === "@acmepay-runbook" ? [current.step_status.startsWith("PATCH") || current.step_status === "APPLYING_PATCH" || current.phase === "started"
           ? "edge-runbook-service" : "edge-triage-runbook"]
         : current?.action === "native_handoff" ? ["edge-triage-" + current.to_agent]
@@ -444,10 +478,21 @@
         : current ? ["edge-request"] : [];
       edgeIds.forEach((id) => $(id).classList.toggle("active", activeEdges.includes(id)));
     }
+    let busVersion;
     function renderBus() {
       const bus = $("bus");
-      const items = auditEvents.map(visibleMessage).filter(Boolean).slice(-60).reverse();
-      if (!items.length) return;
+      const history = $("bus-history").checked;
+      const run = topologyRun();
+      const version = [history, run?.start.id, auditEvents.at(-1)?.id].join(":");
+      if (version === busVersion) return;
+      busVersion = version;
+      show("bus-title", history ? "Saved evidence history" : "Current run evidence");
+      const items = (history ? auditEvents : (run?.events ?? []).filter((event) => event.action !== "native_room_message"))
+        .map(visibleMessage).filter(Boolean).slice(-60).reverse();
+      if (!items.length) {
+        bus.replaceChildren(node("li", "Waiting for a verification run.", "empty"));
+        return;
+      }
       bus.replaceChildren(...items.map((event) => {
         const row = node("li", null, "bus-row");
         const actor = event.from_agent;
@@ -471,6 +516,7 @@
         return row;
       }));
     }
+    $("bus-history").onchange = renderBus;
     let overviewStartId;
     function renderOverview(state) {
       const reset = auditEvents.findLast((event) => event.action === "checkout-pr-state" && event.status === "RESTORED");
@@ -581,6 +627,7 @@
       acceptEvents(state.audit_ledger);
       renderOverview(state);
       renderTopology();
+      renderBus();
       show("discord-current", state.discord_configured ? "Discord notifications are enabled." : "Discord notifications are disabled.");
       connectBus();
     }
