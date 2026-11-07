@@ -11,12 +11,13 @@ from pathlib import Path
 import httpx
 from dotenv import load_dotenv
 
-from agents.notifications import publish_audit
+from agents.notifications import merge_reviewed_pr, publish_audit, require_open_pr
 from app.agent_orchestrator import (
-    NATIVE, approval_records, bind_proposal_message, collect_repro, file_lock,
-    git, inspect_state, ledger, ledger_path, propose_approval, record, review_patch,
+    NATIVE, approval_records, bind_proposal_message, collect_repro, commit_reviewed_patch, file_lock,
+    git, inspect_state, ledger, ledger_path, patch_snapshot, pending_approval, propose_approval, record, review_patch,
+    supersede_native_approval,
 )
-from app.demo_revision import require_demo_revision
+from app.demo_revision import PR_NUMBER, REPOSITORY, require_demo_revision
 from app.evidence import ROOM_ID
 from app.github_inspector import ROOT
 
@@ -30,6 +31,7 @@ AGENTS = {
 KICKOFF = "Run PreFlight verification for PR #402."
 KICKOFFS = {KICKOFF, f"@acmepay-triager {KICKOFF}"}
 DECISION = re.compile(r"(Approved|Rejected)(?: ([a-f0-9]{32}))?", re.IGNORECASE)
+MERGE_DECISION = re.compile(r"Approve and merge ([a-f0-9]{32})", re.IGNORECASE)
 TARGET = "https://github.com/varmaleena/acmepay-invoice-service.git"
 BRANCH = "feat/security-tightening-pr402"
 
@@ -171,11 +173,13 @@ def start_run(room, kickoff):
     repository, drift = state["repository"], state["drift"]
     if repository["origin"] != TARGET or repository["branch"] != BRANCH or state["overall_status"] != "DRIFT_BLOCKED":
         raise SwitchError("Expected the unpatched AcmePay PR checkout and matching live backend.")
+    changed_files = git("diff", "--name-only", repository["base_ref"], "HEAD", "--").splitlines()
     post(room, "triager", "native_triage", thread_id,
          f'PR #402 (GitHub #1), `{repository["short_sha"]}`: BLOCKED. '
+         f'Changed files: {", ".join(changed_files)}. '
          f'Upload limit: backend {drift["backend_max_upload_mb"]} MiB, SDK {drift["frontend_allowed_upload_mb"]} MiB. '
          f'Retry key: backend `{drift["runbook_audit"]["required_retry_env"]}`, SDK `{drift["frontend_retry_env"]}`. '
-         f'Runbook drift: {drift["runbook_drift"]}.')
+         f'Runbook drift: {drift["runbook_drift"]}.', changed_files=changed_files, drift=drift)
     request_id = target(room, "repro", thread_id, "record the before-patch multipart probes")
     before = run_probes(room, thread_id, request_id)
     evidence_id = post(room, "repro", "native_before", thread_id, "Before patch\n" + probe_text(before), result=before)
@@ -200,13 +204,20 @@ def publish_proposal(room, proposal):
         display = f"```diff\n{part}```" if fenced else f"{part}\nEnd of diff part."
         post(room, "runbook", "native_proposal_diff", thread_id,
              f"Proposal `{approval_id}` · diff part {offset // 1300 + 1}\n{display}")
+    publish_review_request(room, proposal)
+
+
+def publish_review_request(room, proposal):
+    approval_id = proposal["approval_id"]
     proposal_message = post(
-        room, "runbook", "native_proposal_review", thread_id,
+        room, "runbook", "native_proposal_review", proposal["thread_id"],
         f'Proposal `{approval_id}` · SHA-256 `{proposal["diff_sha256"]}`\n'
-        "Reply Approved or Rejected in this thread. Approval applies the two-file patch locally "
-        "and posts a final audit comment after verification.",
+        "Reply Approved to apply the reviewed two-file patch locally, or Rejected to decline. "
+        f"Reply `Approve and merge {approval_id}` to authorize the local fix, verification, "
+        "a commit and push of those two files, an audit comment, and merging GitHub PR #1 if the checks pass.",
     )
-    bind_proposal_message(approval_id, proposal_message)
+    bind_proposal_message(approval_id, proposal_message, allow_merge=True,
+                          previous_message_id=proposal["proposal_message_id"])
 
 
 def find_decision(proposal, replies):
@@ -218,7 +229,11 @@ def find_decision(proposal, replies):
     for message in replies[index + 1:]:
         if message.get("kind") != "message" or message.get("sender") != approver_identity():
             continue
-        match = DECISION.fullmatch(message["body"].strip())
+        text = message["body"].strip()
+        merge = MERGE_DECISION.fullmatch(text)
+        if proposal.get("allow_merge") and merge and merge[1].lower() == proposal["approval_id"]:
+            return message, "APPROVE_AND_MERGE"
+        match = DECISION.fullmatch(text)
         if match and match[2] in {None, proposal["approval_id"]}:
             return message, match[1].upper()
     return None
@@ -227,10 +242,12 @@ def find_decision(proposal, replies):
 def finish_run(room, proposal, message, decision):
     thread_id = proposal["thread_id"]
     check_loopback()
+    merge = decision == "APPROVE_AND_MERGE"
     result = review_patch(
-        proposal["approval_id"], proposal["diff_sha256"], decision, approver_identity=message["sender"],
+        proposal["approval_id"], proposal["diff_sha256"], "APPROVED" if merge else decision, approver_identity=message["sender"],
         source=NATIVE, room_id=ROOM, approval_message_id=message["id"],
         timestamp=datetime.fromtimestamp(message["timestamp"] / 1000, timezone.utc).isoformat(),
+        merge=merge,
     )
     if decision == "REJECTED":
         post(room, "runbook", "native_rejection", thread_id, f'Proposal `{proposal["approval_id"]}` rejected.')
@@ -243,12 +260,30 @@ def finish_run(room, proposal, message, decision):
          "Before patch\n" + probe_text(before) + "\n\nAfter patch\n" + probe_text(after), result=after)
     if git("rev-parse", "HEAD").strip() != proposal["base_commit_sha"]:
         raise SwitchError("Target HEAD changed before publication.")
+    verified_head = proposal["base_commit_sha"]
+    head = verified_head
+    if merge:
+        require_open_pr(REPOSITORY, PR_NUMBER, BRANCH, verified_head)
+        head = commit_reviewed_patch(proposal["approval_id"])
+        ref = f"refs/heads/{BRANCH}"
+        git("push", f"--force-with-lease={ref}:{verified_head}", "origin", f"{head}:{ref}", timeout=45)
+        result.update(pushed=True, commit_sha=head)
     audit = publish_audit({**result, "verification": after, "before_verification": before,
-                           "expected_pr_number": 1, "expected_pr_head": proposal["base_commit_sha"],
+                           "expected_pr_number": PR_NUMBER, "expected_pr_head": head,
                            "approval": proposal})
     record("github_comment", audit["status"], audit, source=NATIVE, run_id=thread_id)
     if audit["status"] != "POSTED":
         raise SwitchError(f"GitHub audit publication failed: {audit['error']}")
+    if merge:
+        try:
+            merged = merge_reviewed_pr(REPOSITORY, PR_NUMBER, BRANCH, head)
+        except (RuntimeError, OSError, ValueError) as exc:
+            record("github_merge", "FAILED", {"error": str(exc), "patch_head": head}, source=NATIVE, run_id=thread_id)
+            raise
+        record("github_merge", "MERGED", {**merged, "verified_head": verified_head}, source=NATIVE, run_id=thread_id)
+        post(room, "triager", "native_result", thread_id,
+             f'GitHub confirmed PR #1 merged at `{merged["merge_sha"][:7]}`. Audit: {audit["comment_url"]}')
+        return
     post(room, "triager", "native_result", thread_id, f'Verified local patch. GitHub audit: {audit["comment_url"]}')
 
 
@@ -266,6 +301,12 @@ def tick(room, since):
                    {"room_id": ROOM, "thread_id": thread_id, "message_id": message["id"]},
                    source=NATIVE, actor=f"@acmepay-{senders[message['sender']]}", external_id=message["id"])
     approvals = approval_records(entries)
+    claimed = {event["run_id"] for event in entries if event["action"] == "native_kickoff"}
+    human = approver_identity()
+    kickoff = max((thread["root"] for thread in threads
+                   if thread["root"].get("kind") == "message" and thread["root"].get("sender") == human
+                   and thread["root"]["timestamp"] >= since and thread["root"]["body"].strip() in KICKOFFS
+                   and thread["root"]["id"] not in claimed), key=lambda message: message["timestamp"], default=None)
     for proposal in approvals:
         if proposal["status"] != "PENDING" or proposal["approval_source"] != NATIVE or proposal["room_id"] != ROOM:
             continue
@@ -279,27 +320,39 @@ def tick(room, since):
                 raise
             return
         if proposal["proposal_message_id"]:
-            return  # Only one native review at a time in the pinned room.
-    claimed = {event["run_id"] for event in entries if event["action"] == "native_kickoff"}
-    for thread in threads:
-        root = thread["root"]
-        if (root.get("kind") == "message" and root.get("sender") == approver_identity() and root["timestamp"] >= since
-                and root["body"].strip() in KICKOFFS and root["id"] not in claimed):
-            try:
-                start_run(room, root)
-            except (RuntimeError, OSError, ValueError) as exc:
-                record("native_workflow_error", "FAILED", {"error": str(exc)}, run_id=root["id"])
-                raise
-            return
+            created = datetime.fromisoformat(proposal["created_at"]).timestamp() * 1000
+            if not kickoff or kickoff["timestamp"] <= created:
+                return
+            require_demo_revision()
+            supersede_native_approval(proposal["approval_id"], ROOM, kickoff["id"])
+    if kickoff:
+        try:
+            start_run(room, kickoff)
+        except (RuntimeError, OSError, ValueError) as exc:
+            record("native_workflow_error", "FAILED", {"error": str(exc)}, run_id=kickoff["id"])
+            raise
 
 
 def main():
     load_dotenv(ROOT / ".env", override=False)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check-thread", help="Post harmless delivery and reachability checks in this room thread.")
+    parser.add_argument("--offer-merge", metavar="PROPOSAL_ID", help="Post a new merge authorization request for a pending native proposal.")
     args = parser.parse_args()
     with httpx.Client(timeout=15, trust_env=False) as client:
         room = SwitchRoom(client)
+        if args.offer_merge:
+            with file_lock(ledger_path().with_name(".native_switch.lock")):
+                proposal = pending_approval(args.offer_merge)
+                if proposal["approval_source"] != NATIVE or proposal["room_id"] != ROOM or not proposal["proposal_message_id"]:
+                    raise SwitchError("A previously displayed native proposal is required.")
+                require_demo_revision()
+                if any(proposal[key] != value for key, value in patch_snapshot().items()):
+                    raise SwitchError("The target changed; start a fresh review.")
+                confirmed_message(room, "runbook", "runbook", proposal["thread_id"], proposal["proposal_message_id"])
+                publish_review_request(room, proposal)
+            print(f"Explicit merge review posted for proposal {args.offer_merge}.", flush=True)
+            return
         if args.check_thread:
             event = room.post("triager", "PreFlight threaded delivery check. No changes requested.", args.check_thread)
             confirmed_message(room, "triager", "triager", args.check_thread, event)

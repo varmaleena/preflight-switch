@@ -115,6 +115,7 @@
       <div class="repo-box"><div class="caption">CONFIGURED GITHUB PR / CHECKOUT</div><a id="repo">Waiting for checkout</a><div class="badges"><span class="pill mono" id="branch">—</span><span class="pill mono" id="commit">—</span><span class="pill mono" id="health">:8001 · checking</span></div><p id="demo-revision" role="status">Checking inspection revision.</p></div>
     </div>
     <p class="topology-detail" id="overview-review" role="status" hidden></p>
+    <p class="topology-detail" id="overview-merge" role="status" hidden><a id="merged-pr"></a></p>
     <div class="overview-grid" id="overview-findings" aria-label="Latest verification findings" hidden>
       <article class="card metric" id="metric-payload"><div class="eyebrow">Upload contract</div><div class="metric-value" id="metric-payload-value">—</div><p id="metric-payload-note">Waiting for backend and SDK limits.</p></article>
       <article class="card metric" id="metric-retry"><div class="eyebrow">Runtime retry variable</div><div class="metric-value" id="metric-retry-value">—</div><p id="metric-retry-note">Waiting for the live environment contract.</p></article>
@@ -183,8 +184,8 @@
     <div class="view" id="view-contracts" role="tabpanel" aria-labelledby="tab-contracts" tabindex="0" hidden>
     <section aria-labelledby="matrix-title">
       <div class="heading"><span class="section-num">02</span><h2 id="matrix-title">Cross-Boundary Contract Matrix</h2><a class="section-side caption" id="pr"></a></div>
-      <p class="view-lead">Inspect the current API, SDK, runbook, and Git diff. Start a Discord review to collect the probe evidence and proposed fix.</p>
-      <div class="grid-two">
+      <p class="view-lead" id="contract-review-status" role="status">Waiting for the triager’s findings. Start the review in Discord.</p>
+      <div class="grid-two" id="contract-review" hidden>
         <article class="card"><div class="card-head"><h3>Policy parity</h3><span class="pill mono" id="delta">—</span></div>
           <div class="table-wrap"><table><thead><tr><th scope="col">Contract</th><th scope="col">Backend runtime</th><th scope="col">Frontend SDK</th><th scope="col">SRE runbook</th></tr></thead>
           <tbody><tr><th scope="row">Upload limit</th><td id="backend-limit">—</td><td id="sdk-limit">—</td><td id="runbook-limit">—</td></tr><tr><th scope="row">Retry env</th><td id="backend-retry">—</td><td id="sdk-retry">—</td><td id="runbook-retry">—</td></tr></tbody></table></div><p class="matrix-note" id="findings">Reading policy from the live service and checkout.</p>
@@ -196,11 +197,14 @@
     <div class="view" id="view-sandbox" role="tabpanel" aria-labelledby="tab-sandbox" tabindex="0" hidden>
     <section aria-labelledby="probe-title">
       <div class="heading"><span class="section-num">03</span><h2 id="probe-title">Live Multipart Probe &amp; Runbook Audit</h2><span class="caption section-side">:8001 /v1/invoices/upload</span></div>
-      <p class="view-lead">Repeat an upload check yourself. The Discord review runs its own probes and records them with the proposed fix.</p>
+      <p class="view-lead" id="sandbox-review-status" role="status">Waiting for the repro agent to run the first upload checks.</p>
       <div class="grid-two">
         <article class="card"><div class="card-head"><h3>Binary invoice verifier</h3><span class="pill mono">application/pdf</span></div><div class="card-body">
+          <div id="agent-probe-results" aria-label="Verification probe results" hidden></div>
+          <details id="manual-probe" hidden><summary>Repeat a probe manually</summary>
           <div class="actions"><button type="button" class="btn" id="probe-small">1.5 MiB PDF · Within both limits</button><button type="button" class="btn" id="probe-large">4.0 MiB PDF · Verify boundary</button></div>
           <form id="upload"><label class="drop" id="drop">Drop a real invoice or choose a file<input type="file" id="file" aria-describedby="file-name"><span class="caption" id="file-name">No file selected</span></label><button class="btn primary" type="submit" id="send">Send real file</button></form>
+          </details>
           <div class="telemetry" role="status"><span class="pill mono" id="http-status">Awaiting probe</span><span class="caption" id="latency">— ms</span></div><p class="caption" id="probe-sdk-policy">A sandbox probe sends the file directly to the API and reports the SDK’s size decision separately.</p><p class="mono" id="hash">SHA-256 —</p>
         </div><pre class="codebox" id="response" tabindex="0">Live response JSON will appear here.</pre></article>
         <article class="card"><div class="card-head"><h3>SRE runbook</h3><span class="pill mono" id="runbook-status">Checking</span></div><pre class="codebox runbook" id="runbook" tabindex="0">Waiting for docs/oncall-runbook.md…</pre><div class="card-head"><h3>Audit ledger · newest first</h3><span class="pill mono" id="event-count">0 events</span></div><ul class="ledger" id="ledger" tabindex="0"><li class="empty">Waiting for recorded evidence…</li></ul></article>
@@ -410,6 +414,8 @@
       const start = auditEvents.findLast((event) => event.action === "native_kickoff" ||
         (event.action === "handoff" && ["REQUESTED", "AUDITING_DIFF"].includes(event.status)));
       if (!start) return null;
+      const reset = auditEvents.findLast((event) => event.action === "checkout-pr-state" && event.status === "RESTORED");
+      if (reset?.id > start.id) return null;
       const runId = start.run_id;
       const related = (event) => event.run_id === runId || event.evidence?.thread_id === runId;
       const proposal = auditEvents.findLast((event) => related(event) && event.action === "approval_delivery")
@@ -419,14 +425,16 @@
       const events = auditEvents.filter((event) => related(event) || sameProposal(event));
       const decision = events.findLast((event) => event.action === "approval_decision");
       const waiting = !!proposal && !decision;
-      if (!waiting && start.id <= (overviewStartId ?? start.id)
-          && Date.now() - Date.parse(start.timestamp) > 120000) return null;
-      const last = events.findLast((event) => event.action !== "native_room_message" && event.action !== "probe");
+      const last = events.findLast((event) => event.action !== "native_room_message" && event.action !== "probe") ?? start;
+      const merged = events.some((event) => event.action === "github_merge" && event.status === "MERGED");
+      if (!waiting && !merged && last.id <= (overviewStartId ?? last.id)
+          && Date.now() - Date.parse(last.timestamp) > 120000) return null;
       const verified = events.some((event) => event.action === "native_after" ||
         (event.action === "patch-and-verify" && event.status === "VERIFIED"));
       let status = "Verification running";
       if (last?.status === "FAILED" || decision?.status === "INVALIDATED") status = "Verification needs attention";
       else if (decision?.status === "REJECTED") status = "Proposal rejected";
+      else if (merged) status = "Merged on GitHub";
       else if (verified) status = "After-check recorded";
       else if (decision?.status === "APPROVED") status = "Approved · rechecking";
       else if (waiting) status = "Waiting for human approval";
@@ -520,34 +528,93 @@
     }
     $("bus-history").onchange = renderBus;
     let overviewStartId;
+    function reviewEvidence(run) {
+      const events = run?.events ?? [];
+      const native = run?.start.event_origin === "NATIVE_SWITCH";
+      const triage = events.findLast((event) => native ? event.action === "native_triage" : event.action === "triage");
+      const before = events.find((event) => native ? event.action === "native_before" : event.action === "repro");
+      const after = events.findLast((event) => native ? event.action === "native_after" :
+        event.action === "patch-and-verify" && event.status === "VERIFIED");
+      const report = (event) => event?.evidence.result ?? event?.evidence.verification ?? event?.evidence;
+      return {native, triage, before, after, beforeReport:report(before), afterReport:report(after),
+        merge:events.findLast((event) => event.action === "github_merge" && event.status === "MERGED")};
+    }
+    let probeEvidenceVersion;
+    function renderReviewEvidence() {
+      const run = topologyRun();
+      const evidence = reviewEvidence(run);
+      $("contract-review").hidden = !evidence.triage;
+      $("runbook").hidden = !evidence.triage;
+      $("runbook-status").hidden = !evidence.triage;
+      if (evidence.merge) link("pr", "GitHub PR #" + evidence.merge.evidence.pr_number + " · merged ↗",
+        evidence.merge.evidence.pr_url);
+      show("contract-review-status", evidence.triage
+        ? (evidence.native ? "Discord triage recorded" : "Local triage recorded") + " · evidence #" + evidence.triage.id
+        : "Waiting for the triager’s findings. Start the review in Discord.");
+      const ready = !!evidence.beforeReport?.probes?.length;
+      $("agent-probe-results").hidden = !ready;
+      $("manual-probe").hidden = !ready || !latestState?.demo_revision?.demo_safe;
+      show("sandbox-review-status", ready
+        ? (evidence.native ? "Agent-run probes from Discord" : "Probes from local orchestration") + " · Select a result to inspect its HTTP response."
+        : "Waiting for the repro agent to run the first upload checks.");
+      const version = [run?.start.id, evidence.before?.id, evidence.after?.id].join(":");
+      if (version === probeEvidenceVersion) return;
+      probeEvidenceVersion = version;
+      const results = $("agent-probe-results");
+      results.replaceChildren();
+      if (!ready) {
+        show("http-status", "Awaiting agent probes");
+        show("latency", "— ms");
+        show("hash", "SHA-256 —");
+        show("response", "Agent-run HTTP evidence will appear here.");
+        show("probe-sdk-policy", "SDK decision will appear with the first result.");
+        return;
+      }
+      for (const [label, report] of [["Before approval", evidence.beforeReport], ["After approval", evidence.afterReport]]) {
+        if (!report?.probes?.length) continue;
+        const group = node("div", null, "actions");
+        for (const probe of report.probes) {
+          const button = node("button", probe.size_mb + " MiB · HTTP " + probe.http_status
+            + " · SDK " + (probe.frontend_allows ? "allows" : "rejects"), "btn");
+          button.type = "button";
+          button.onclick = () => renderProbe(probe);
+          group.append(button);
+        }
+        results.append(node("h3", label), group);
+      }
+      renderProbe((evidence.afterReport ?? evidence.beforeReport).probes.at(-1));
+    }
     function overviewRunNote(run) {
       if (!run) return "";
       if (run.waiting) return run.start.event_origin === "NATIVE_SWITCH"
-        ? "Waiting for your review. Open the proposal in Discord and reply in its thread."
+        ? "Waiting for your review. Open the proposal in Discord and use the approval command shown there."
         : "Waiting for your review. Open Review Local Patch to see the proposed changes.";
-      const before = run.events.find((event) => event.action === "native_before")?.evidence?.result
-        ?? run.events.find((event) => event.action === "repro")?.evidence;
-      const after = run.events.findLast((event) => event.action === "native_after")?.evidence?.result
-        ?? run.events.findLast((event) => event.action === "patch-and-verify"
-          && event.status === "VERIFIED")?.evidence?.verification;
+      const {beforeReport:before, afterReport:after} = reviewEvidence(run);
       const changed = after?.probes?.find((probe) => probe.verified && !probe.frontend_allows &&
         before?.probes?.some((prior) => prior.size_bytes === probe.size_bytes && prior.frontend_allows));
-      if (changed) return "After-check passed. The SDK now rejects the " + changed.size_mb
-        + " MiB file before upload. It previously allowed it.";
+      if (changed) return "After-check passed. SDK limit: " + before.drift.frontend_allowed_upload_mb
+        + " → " + after.drift.frontend_allowed_upload_mb + " MiB. The SDK now rejects the "
+        + changed.size_mb + " MiB file before upload. It previously allowed it.";
       return run.status + (run.detail ? " · " + run.detail : "");
     }
     function renderOverview(state) {
-      const note = overviewRunNote(topologyRun());
+      const run = topologyRun();
+      const evidence = reviewEvidence(run);
+      const note = overviewRunNote(run);
       $("overview-review").hidden = !note;
       if (note) show("overview-review", note);
-      const reset = auditEvents.findLast((event) => event.action === "checkout-pr-state" && event.status === "RESTORED");
-      const after = Math.max(overviewStartId ?? 0, reset?.id ?? 0);
-      const result = auditEvents.findLast((event) => event.id > after && event.action === "repro"
-        && event.event_origin === "SANDBOX_PROBE");
-      const proof = result?.evidence;
+      const result = evidence.after ?? evidence.before;
+      const proof = evidence.afterReport ?? evidence.beforeReport;
       const drift = proof?.drift;
+      const merge = evidence.merge?.evidence;
+      $("overview-merge").hidden = !merge;
+      if (merge) {
+        link("merged-pr", "GitHub confirmed PR #" + merge.pr_number + " merged · " + merge.merge_sha.slice(0, 7), merge.pr_url);
+        show("demo-revision", "The demo PR has merged. The original unpatched fixture is now historical.");
+      }
       const current = drift && proof.probes?.length && proof.probes.every((probe) =>
-        probe.verified && probe.target_commit_sha === state.repository.commit_sha)
+        probe.verified && (probe.target_commit_sha === state.repository.commit_sha
+          || (merge?.patch_head === state.repository.commit_sha && probe.target_commit_sha === merge.verified_head)))
         && JSON.stringify(drift) === JSON.stringify(state.drift);
       $("overview-findings").hidden = !current;
       if (!current) {
@@ -558,8 +625,8 @@
       }
       const count = Number(drift.payload_drift) + Number(drift.env_drift) + Number(drift.runbook_drift);
       const gate = state.release_gate;
-      show("gate", gate === "BLOCKED" ? "DRIFT DETECTED · " + count + " CONTRACT VIOLATION" + (count === 1 ? "" : "S")
-        : gate === "VERIFIED" ? "LOCAL CONTRACT ALIGNED" : "UNVERIFIED · CHECK TARGET", gate === "BLOCKED" ? "bad" : gate === "VERIFIED" ? "good" : "warn");
+      show("gate", merge ? "VERIFIED · MERGED ON GITHUB" : gate === "BLOCKED" ? "DRIFT DETECTED · " + count + " CONTRACT VIOLATION" + (count === 1 ? "" : "S")
+        : gate === "VERIFIED" ? "LOCAL CONTRACT ALIGNED" : "UNVERIFIED · CHECK TARGET", merge || gate === "VERIFIED" ? "good" : gate === "BLOCKED" ? "bad" : "warn");
       show("overview-evidence", "Latest verification · audit event #" + result.id);
       show("metric-payload-value", drift.backend_max_upload_mb + " MiB / " + drift.frontend_allowed_upload_mb + " MiB");
       show("metric-payload-note", drift.payload_drift ? "Backend / SDK · " + drift.boundary_delta_mb + " MiB contract gap" : "Backend and SDK limits agree.");
@@ -577,6 +644,7 @@
       renderLedger(auditEvents);
       renderBus();
       renderTopology();
+      renderReviewEvidence();
       if (latestState) renderOverview(latestState);
     }
     function connectBus() {
@@ -649,6 +717,7 @@
       renderOverview(state);
       renderTopology();
       renderBus();
+      renderReviewEvidence();
       show("discord-current", state.discord_configured ? "Discord notifications are enabled." : "Discord notifications are disabled.");
       connectBus();
     }

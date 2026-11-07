@@ -15,6 +15,6 @@
 ## Show the evidence
 
 1. Send `Run PreFlight verification for PR #402.` in the room. Show the triage report, the targeted repro handoff, and the room evidence. A 1.5 MiB PDF receives HTTP 200. A 4 MiB PDF receives HTTP 413 even though the SDK allows it. Both results include SHA-256 evidence.
-2. Review the exact SDK/runbook diff and proposal ID in the room or workbench. Reply `Approved` or `Rejected` in the proposal thread using the linked approver account. Show the recorded decision and diff digest in the workbench.
-3. After approval, the patch stays local. The after-check still returns HTTP 200 for 1.5 MiB and HTTP 413 for 4 MiB. The SDK now rejects the 4 MiB file too. Show the final audit comment on PR #1 after publication.
+2. Open the workbench after the kickoff. The triage result unlocks the Contract Matrix. Sandbox shows the repro agent’s requests automatically. Review the exact SDK/runbook diff and proposal ID in the Discord thread.
+3. Reply `Approved` for a local patch and audit comment, `Rejected` to decline, or `Approve and merge <proposal-id>` to authorize a commit, push, and merge after verification. Use the linked approver account. The after-check still returns HTTP 200 for 1.5 MiB and HTTP 413 for 4 MiB. Sandbox shows both runs and the SDK’s changed decision for the 4 MiB file. Overview links to GitHub after GitHub confirms the merge. A real merge closes the seeded PR, so use the merge command during the final take.
 4. Run the handoff diagnostic again to confirm which steps have evidence. Use **Run Local Orchestration** for the explicitly labeled local path if Discord is unavailable.

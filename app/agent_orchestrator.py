@@ -445,12 +445,25 @@ def pending_approval(approval_id: str) -> dict:
     return proposal
 
 
-def bind_proposal_message(approval_id: str, message_id: str) -> None:
+def bind_proposal_message(approval_id: str, message_id: str, *, allow_merge: bool = False,
+                          previous_message_id: str | None = None) -> None:
     with file_lock(ledger_path().with_name(".target.lock")):
         proposal = pending_approval(approval_id)
-        if proposal["approval_source"] != NATIVE or proposal["proposal_message_id"] or not message_id:
+        if (proposal["approval_source"] != NATIVE or proposal["proposal_message_id"] != previous_message_id
+                or not message_id):
             raise MutationConflict("Cannot bind the Switch proposal message.")
-        record("approval_delivery", "PENDING", {**proposal, "proposal_message_id": message_id}, source=NATIVE)
+        record("approval_delivery", "PENDING",
+               {**proposal, "proposal_message_id": message_id, "allow_merge": allow_merge}, source=NATIVE)
+
+
+def supersede_native_approval(approval_id: str, room_id: str, message_id: str) -> None:
+    with file_lock(ledger_path().with_name(".target.lock")):
+        proposal = pending_approval(approval_id)
+        if proposal["approval_source"] != NATIVE or proposal["room_id"] != room_id:
+            raise MutationConflict("The pending proposal is outside this Switch room.")
+        record("approval_decision", "INVALIDATED",
+               {**proposal, "status": "INVALIDATED", "reason": "Superseded by a new linked-human kickoff",
+                "superseded_by_message_id": message_id}, source=NATIVE)
 
 
 @broadcast_step("prepare")
@@ -465,11 +478,13 @@ def prepare_handoff(run_id: str | None = None) -> dict:
 
 def review_patch(approval_id: str, diff_sha256: str, decision: str, *,
                  approver_identity: str, source: str = LOCAL, room_id: str | None = None,
-                 approval_message_id: str | None = None, timestamp: str | None = None) -> dict:
+                 approval_message_id: str | None = None, timestamp: str | None = None,
+                 merge: bool = False) -> dict:
     with file_lock(ledger_path().with_name(".target.lock")):
         proposal = pending_approval(approval_id)
         if (not approver_identity or proposal["approval_source"] != source or proposal["room_id"] != room_id
-                or proposal["diff_sha256"] != diff_sha256 or decision not in {"APPROVED", "REJECTED"}):
+                or proposal["diff_sha256"] != diff_sha256 or decision not in {"APPROVED", "REJECTED"}
+                or (merge and (source != NATIVE or decision != "APPROVED" or not proposal.get("allow_merge")))):
             raise MutationConflict("Approval identity, scope, decision, or reviewed digest does not match.")
         if source == NATIVE and (not approval_message_id or not proposal["proposal_message_id"] or not timestamp
                                  or any(item.get("approval_message_id") == approval_message_id
@@ -487,6 +502,7 @@ def review_patch(approval_id: str, diff_sha256: str, decision: str, *,
         reviewed = {**proposal, "status": decision, "decision": decision,
                     "approver_identity": approver_identity, "reviewed_diff_digest": diff_sha256,
                     "approval_message_id": approval_message_id,
+                    "merge_authorized": merge,
                     "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
                     "current_commit_sha": snapshot["base_commit_sha"]}
         record("approval_decision", decision, reviewed, source=source)
@@ -511,6 +527,29 @@ def review_patch(approval_id: str, diff_sha256: str, decision: str, *,
                   "verification": verification, "commit_sha": snapshot["base_commit_sha"]}
         record("patch-and-verify", result["status"], result, source=source)
         return result
+
+
+def commit_reviewed_patch(approval_id: str) -> str:
+    with file_lock(ledger_path().with_name(".target.lock")):
+        approval = next((item for item in approval_records() if item["approval_id"] == approval_id), {})
+        if approval.get("status") != "APPROVED" or not approval.get("merge_authorized"):
+            raise MutationConflict("This patch has no explicit merge approval.")
+        base = approval["base_commit_sha"]
+        if (approved_branch() != approval["target_branch"] or git("rev-parse", "HEAD").strip() != base
+                or git("remote", "get-url", "origin").strip() != approval["target_repository"]):
+            raise MutationConflict("The target revision changed before publication.")
+        _, paths, _, expected = repo_edit_context()
+        if (tuple(path.read_text(encoding="utf-8") for path in paths) != expected
+                or set(git("diff", "--name-only", "HEAD").splitlines()) != {SDK, RUNBOOK}
+                or git("ls-files", "--others", "--exclude-standard").strip()):
+            raise MutationConflict("The checkout differs from the reviewed two-file patch.")
+        git("commit", "--only", "-m", "fix: align invoice SDK and runbook with API limits", "--", SDK, RUNBOOK)
+        head = git("rev-parse", "HEAD").strip()
+        if (git("rev-parse", "HEAD^").strip() != base
+                or set(git("diff", "--name-only", base, head).splitlines()) != {SDK, RUNBOOK}
+                or contract_files(head) != expected or git("status", "--porcelain").strip()):
+            raise MutationConflict("The remediation commit differs from the reviewed patch. It was not pushed.")
+        return head
 
 
 def checkout_pr_state(approval_id: str) -> dict:

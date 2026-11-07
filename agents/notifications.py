@@ -130,11 +130,39 @@ def markdown_audit(result: dict) -> str:
         for old, new in zip(before, verification["probes"]):
             lines.append(f"| {new['size_mb']:g} MiB | HTTP {old['http_status']} | HTTP {new['http_status']} | "
                          f"{'Allows' if new['frontend_allows'] else 'Rejects'} |")
+        location = "on the PR branch" if result.get("pushed") else "local"
         lines.extend(["", f"Approval `{result['approval']['approval_id']}` · "
                       f"reviewed diff SHA-256 `{result['approval']['diff_sha256']}`. "
-                      "The verified patch is local."])
+                      f"The verified patch is {location}."])
     lines.extend(["", "_Evidence collected against the running AcmePay service by PreFlight._", ""])
     return "\n".join(lines)
+
+
+def gh(*args: str) -> str:
+    response = subprocess.run([github_cli(), *args], cwd=target_repo(), env=github_environment(), capture_output=True,
+                              text=True, encoding="utf-8", timeout=25)
+    if response.returncode:
+        raise RuntimeError(f"GitHub CLI {args[0]} {args[1]} failed: {response.stderr.strip()[:240]}")
+    return response.stdout.strip()
+
+
+def require_open_pr(repository: str, number: int, branch: str, head: str) -> dict:
+    pr = json.loads(gh("pr", "view", str(number), "--repo", repository,
+                       "--json", "number,url,state,baseRefName,headRefName,headRefOid,isCrossRepository"))
+    if (pr["state"] != "OPEN" or pr["number"] != number
+            or pr["baseRefName"] != "main" or pr["isCrossRepository"]
+            or pr["headRefName"] != branch or pr["headRefOid"] != head):
+        raise RuntimeError("The hosted PR or its head differs from the reviewed revision.")
+    return pr
+
+
+def merge_reviewed_pr(repository: str, number: int, branch: str, head: str) -> dict:
+    require_open_pr(repository, number, branch, head)
+    gh("pr", "merge", str(number), "--repo", repository, "--merge", "--match-head-commit", head)
+    pr = json.loads(gh("pr", "view", str(number), "--repo", repository, "--json", "state,mergeCommit,url"))
+    if pr["state"] != "MERGED" or not (pr.get("mergeCommit") or {}).get("oid"):
+        raise RuntimeError("GitHub has not confirmed a merge.")
+    return {"pr_url": pr["url"], "pr_number": number, "merge_sha": pr["mergeCommit"]["oid"], "patch_head": head}
 
 
 def comment_audit(result: dict) -> dict:
@@ -142,15 +170,6 @@ def comment_audit(result: dict) -> dict:
     if not slug:
         raise RuntimeError("Target origin is not a supported GitHub repository.")
     branch = os.environ.get("TARGET_PR_BRANCH", "feat/security-tightening-pr402")
-    executable = github_cli()
-    env = github_environment()
-
-    def gh(*args: str) -> str:
-        response = subprocess.run([executable, *args], cwd=target_repo(), env=env, capture_output=True,
-                                  text=True, encoding="utf-8", timeout=25)
-        if response.returncode:
-            raise RuntimeError(f"GitHub CLI {args[0]} {args[1]} returned exit code {response.returncode}.")
-        return response.stdout.strip()
 
     pr = json.loads(gh("pr", "view", branch, "--repo", slug, "--json", "number,url,state,headRefName,headRefOid"))
     if pr["state"] != "OPEN" or pr["headRefName"] != branch:

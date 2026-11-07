@@ -146,6 +146,34 @@ def test_approval_requires_linked_human_after_the_bound_proposal(target):
     assert native.find_decision(proposal, [displayed, {**valid, "body": "Approved " + "0" * 32}]) is None
 
 
+def test_merge_requires_explicit_command_and_new_scope(target):
+    proposal = {**pending(), "proposal_message_id": "proposal-message"}
+    displayed = message("proposal-message", native.AGENTS["runbook"][1], "Review this diff.")
+    valid = message("human", APPROVER, f'Approve and merge {proposal["approval_id"]}')
+    assert native.find_decision(proposal, [displayed, valid]) is None
+    with pytest.raises(review.MutationConflict, match="scope"):
+        decision(proposal, merge=True)
+    proposal["allow_merge"] = True
+    assert native.find_decision(proposal, [displayed, valid]) == (valid, "APPROVE_AND_MERGE")
+    assert native.find_decision(proposal, [displayed, {**valid, "sender": "another-human"}]) is None
+    ordinary = {**valid, "body": "Approved"}
+    assert native.find_decision(proposal, [displayed, ordinary]) == (ordinary, "APPROVED")
+
+
+def test_fresh_linked_kickoff_supersedes_a_pending_proposal(target, monkeypatch):
+    proposal = pending()
+    kickoff = {**message("new-thread", APPROVER, native.KICKOFF), "timestamp": 10**15}
+    room = SimpleNamespace(history=lambda: [{"root": kickoff, "replies": []}])
+    start = Mock()
+    monkeypatch.setattr(native, "start_run", start)
+    native.tick(room, 1000)
+    start.assert_called_once_with(room, kickoff)
+    invalidated = next(p for p in review.approval_records() if p["approval_id"] == proposal["approval_id"])
+    assert invalidated["status"] == "INVALIDATED"
+    assert invalidated["superseded_by_message_id"] == kickoff["id"]
+    assert all(path.read_text() == "before" for path in target[0])
+
+
 def test_loopback_guard_rejects_non_local_targets(monkeypatch):
     native.check_loopback()
     monkeypatch.setenv("TARGET_API_URL", "https://api.example.com")
@@ -224,20 +252,30 @@ class Room:
         return identifier
 
 
-@pytest.mark.parametrize("fail_after", [False, True])
+@pytest.mark.parametrize("fail_after, merge", [(False, False), (True, False), (False, True), (True, True)])
 @pytest.mark.parametrize("runbook_fence", ["", "```sh\n export LEGACY_RETRY_LIMIT=5\n ```\n"])
-def test_native_handoff_and_publication_order(target, monkeypatch, fail_after, runbook_fence):
+def test_native_handoff_and_publication_order(target, monkeypatch, fail_after, merge, runbook_fence):
     room = Room()
     target[1]["full_unified_diff"] += runbook_fence
     target[1]["diff_sha256"] = sha256(target[1]["full_unified_diff"].encode()).hexdigest()
     monkeypatch.setattr(native, "inspect_state", lambda: {
         "overall_status": "DRIFT_BLOCKED",
         "repository": {"origin": native.TARGET, "branch": native.BRANCH, "short_sha": "aaaaaaa",
-                       "commit_sha": target[1]["base_commit_sha"]},
+                       "commit_sha": target[1]["base_commit_sha"], "base_ref": "main"},
         "drift": {"backend_max_upload_mb": 2, "frontend_allowed_upload_mb": 10,
                   "runbook_audit": {"required_retry_env": "NEW"}, "frontend_retry_env": "OLD", "runbook_drift": True},
     })
-    monkeypatch.setattr(native, "git", lambda *args: target[1]["base_commit_sha"])
+    operations = []
+    def target_git(*args, **options):
+        if args[0] == "push":
+            operations.append("push")
+        return target[1]["base_commit_sha"]
+    monkeypatch.setattr(native, "git", target_git)
+    monkeypatch.setattr(native, "require_open_pr", lambda *args: operations.append("open_pr"))
+    monkeypatch.setattr(native, "commit_reviewed_patch", lambda *args: operations.append("commit") or "b" * 40)
+    monkeypatch.setattr(native, "merge_reviewed_pr", lambda *args: operations.append("merge") or {
+        "merge_sha": "c" * 40, "patch_head": "b" * 40, "pr_url": "https://github.com/example", "pr_number": 1,
+    })
     publisher = Mock(return_value={"status": "POSTED", "comment_url": "https://github.com/example"})
     monkeypatch.setattr(native, "publish_audit", publisher)
 
@@ -245,6 +283,8 @@ def test_native_handoff_and_publication_order(target, monkeypatch, fail_after, r
         after = target[0][0].read_text() == "after"
         if after and fail_after:
             raise native.SwitchError("after-check failed")
+        if after:
+            operations.append("after-check")
         return {"status": "VERIFIED" if after else "CROSS_BOUNDARY_REGRESSION", "probes": [
             {"size_mb": size, "http_status": status, "frontend_allows": size < 2 or not after,
              "sha256": "0" * 64, "ledger_event_id": index}
@@ -257,13 +297,19 @@ def test_native_handoff_and_publication_order(target, monkeypatch, fail_after, r
     assert publisher.call_count == 0
     assert all(path.read_text() == "before" for path in target[0])
     assert review.approval_records()[0]["full_unified_diff"] in "".join(m["body"] for m in room.replies)
-    room.replies.append(message("human-approval", APPROVER, "Approved"))
+    approval = review.approval_records()[0]
+    room.replies.append(message("human-approval", APPROVER,
+                                f'Approve and merge {approval["approval_id"]}' if merge else "Approved"))
     if fail_after:
         with pytest.raises(native.SwitchError, match="after-check failed"):
             native.tick(room, 1000)
         publisher.assert_not_called()
+        assert operations == []
     else:
         native.tick(room, 1000)
         publisher.assert_called_once()
         assert room.operations[-1] == ("target", "repro")
         assert any("After patch" in reply["body"] for reply in room.replies)
+        assert operations == (["after-check", "open_pr", "commit", "push", "merge"] if merge else ["after-check"])
+        if merge:
+            assert any(event["action"] == "github_merge" and event["status"] == "MERGED" for event in review.ledger())

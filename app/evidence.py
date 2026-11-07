@@ -17,7 +17,7 @@ def event_origin(event: dict) -> str:
     proof = event.get("evidence") or {}
     if source == "room_rehearsal":
         return "REHEARSAL"
-    if action == "github_comment":
+    if action in {"github_comment", "github_merge"}:
         return "GITHUB"
     if action in {"probe", "repro"}:
         return "SANDBOX_PROBE"
@@ -51,7 +51,9 @@ def handoff_diagnostics(entries: list[dict]) -> dict:
         return "PASS" if passed else "NOT_OBSERVED"
 
     publication = next((event for event in reversed(entries) if thread and event.get("run_id") == thread
-                        and event_origin(event) == "GITHUB"), None)
+                        and event["action"] == "github_comment"), None)
+    merge = next((event for event in reversed(entries) if thread and event.get("run_id") == thread
+                  and event["action"] == "github_merge"), None)
     outcome = next((event["status"] for event in reversed(run) if event["action"] == "approval_decision"), None)
     steps = {
         "human_kickoff": status(kickoff), "triage_report": status(observed("native_triage")),
@@ -67,6 +69,8 @@ def handoff_diagnostics(entries: list[dict]) -> dict:
         "github_publication": ("PASS" if publication["status"] == "POSTED" else "FAIL")
         if publication else "NOT_OBSERVED",
     }
+    if merge:
+        steps["github_merge"] = "PASS" if merge["status"] == "MERGED" else "FAIL"
     failure = next((event["evidence"]["error"] for event in reversed(entries)
                     if thread and event.get("run_id") == thread and event["action"] == "native_workflow_error"), None)
     return {
